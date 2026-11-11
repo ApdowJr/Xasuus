@@ -126,6 +126,7 @@ class NoteViewModel(
         color: String,
         isPinned: Boolean,
         isFavorite: Boolean,
+        reminderAtMillis: Long? = null,
         onSuccess: (String) -> Unit = {}
     ) {
         viewModelScope.launch {
@@ -136,7 +137,8 @@ class NoteViewModel(
                 tags = tags,
                 color = color,
                 isPinned = isPinned,
-                isFavorite = isFavorite
+                isFavorite = isFavorite,
+                reminderAtMillis = reminderAtMillis
             )
             result.onSuccess { id ->
                 _operationMessage.value = "Xasuusta si guul leh ayaa loo kaydiyay!"
@@ -157,6 +159,7 @@ class NoteViewModel(
         isPinned: Boolean,
         isFavorite: Boolean,
         isArchived: Boolean,
+        reminderAtMillis: Long? = null,
         onSuccess: () -> Unit = {}
     ) {
         viewModelScope.launch {
@@ -169,7 +172,8 @@ class NoteViewModel(
                 color = color,
                 isPinned = isPinned,
                 isFavorite = isFavorite,
-                isArchived = isArchived
+                isArchived = isArchived,
+                reminderAtMillis = reminderAtMillis
             )
             result.onSuccess {
                 _operationMessage.value = "Xasuusta waa la cusbooneysiiyay!"

@@ -25,8 +25,6 @@ import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.lazy.staggeredgrid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -36,28 +34,37 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.example.ui.theme.XasuusTheme
 
+/**
+ * Shimmer brush used across every skeleton in the app. It sweeps a soft highlight across a
+ * recessed base so loading states feel calm rather than flashy.
+ */
 @Composable
 fun rememberShimmerBrush(): Brush {
     val transition = rememberInfiniteTransition(label = "shimmer_transition")
     val translateAnim by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1200f,
+        initialValue = -320f,
+        targetValue = 1400f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1300, easing = LinearEasing),
+            animation = tween(durationMillis = 1500, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ),
         label = "shimmer_translate"
     )
 
-    val baseColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
-    val highlightColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.15f)
+    val colors = XasuusTheme.colors
+    val base = colors.recessed
+    val highlight = if (colors.isDark) {
+        androidx.compose.ui.graphics.Color(0xFF37324A)
+    } else {
+        androidx.compose.ui.graphics.Color(0xFFFFFFFF)
+    }
 
     return Brush.linearGradient(
-        colors = listOf(baseColor, highlightColor, baseColor),
-        start = Offset(translateAnim - 400f, translateAnim - 400f),
+        colors = listOf(base, highlight, base),
+        start = Offset(translateAnim - 320f, translateAnim - 320f),
         end = Offset(translateAnim, translateAnim)
     )
 }
@@ -68,116 +75,90 @@ fun NoteCardSkeleton(
     bodyLines: Int = 2,
     modifier: Modifier = Modifier
 ) {
-    Card(
+    Column(
         modifier = modifier
             .fillMaxWidth()
-            .testTag("note_card_skeleton"),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+            .clip(RoundedCornerShape(22.dp))
+            .background(XasuusTheme.colors.card)
+            .padding(14.dp)
     ) {
-        Column(
-            modifier = Modifier.padding(14.dp)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            // Header: Category dot + Category label placeholder
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(10.dp)
-                            .clip(CircleShape)
-                            .background(brush)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Box(
-                        modifier = Modifier
-                            .width(52.dp)
-                            .height(12.dp)
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(brush)
-                    )
-                }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(6.dp).clip(CircleShape).background(brush))
+                Spacer(Modifier.width(6.dp))
                 Box(
-                    modifier = Modifier
-                        .size(16.dp)
-                        .clip(CircleShape)
+                    Modifier
+                        .width(54.dp)
+                        .height(9.dp)
+                        .clip(RoundedCornerShape(4.dp))
                         .background(brush)
                 )
             }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Title Placeholder
             Box(
-                modifier = Modifier
-                    .fillMaxWidth(0.85f)
-                    .height(18.dp)
-                    .clip(RoundedCornerShape(6.dp))
+                Modifier
+                    .width(34.dp)
+                    .height(9.dp)
+                    .clip(RoundedCornerShape(4.dp))
                     .background(brush)
             )
+        }
 
-            Spacer(modifier = Modifier.height(10.dp))
+        Spacer(Modifier.height(14.dp))
 
-            // Content Lines Placeholder
+        Box(
+            Modifier
+                .fillMaxWidth(0.88f)
+                .height(15.dp)
+                .clip(RoundedCornerShape(6.dp))
+                .background(brush)
+        )
+        Spacer(Modifier.height(8.dp))
+        Box(
+            Modifier
+                .fillMaxWidth(0.6f)
+                .height(15.dp)
+                .clip(RoundedCornerShape(6.dp))
+                .background(brush)
+        )
+
+        Spacer(Modifier.height(12.dp))
+
+        repeat(bodyLines.coerceIn(1, 3)) { index ->
             Box(
-                modifier = Modifier
-                    .fillMaxWidth()
+                Modifier
+                    .fillMaxWidth(if (index == bodyLines - 1) 0.62f else 1f)
+                    .height(9.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(brush)
+            )
+            Spacer(Modifier.height(6.dp))
+        }
+
+        Spacer(Modifier.height(10.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Box(
+                Modifier
+                    .width(44.dp)
                     .height(12.dp)
                     .clip(RoundedCornerShape(4.dp))
                     .background(brush)
             )
-
-            if (bodyLines >= 2) {
-                Spacer(modifier = Modifier.height(6.dp))
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth(0.65f)
-                        .height(12.dp)
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(brush)
-                )
-            }
-
-            if (bodyLines >= 3) {
-                Spacer(modifier = Modifier.height(6.dp))
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth(0.45f)
-                        .height(12.dp)
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(brush)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            // Footer: Tag and timestamp placeholder
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Box(
-                    modifier = Modifier
-                        .width(48.dp)
-                        .height(14.dp)
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(brush)
-                )
-                Box(
-                    modifier = Modifier
-                        .width(36.dp)
-                        .height(12.dp)
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(brush)
-                )
-            }
+            Box(
+                Modifier
+                    .width(30.dp)
+                    .height(10.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(brush)
+            )
         }
     }
 }
@@ -188,27 +169,27 @@ fun NotesSkeletonLayout(
     modifier: Modifier = Modifier
 ) {
     val brush = rememberShimmerBrush()
-    val skeletonProfiles = listOf(2, 3, 1, 3, 2, 1)
+    val profiles = listOf(2, 3, 1, 3, 2, 1)
 
     if (isGrid) {
         LazyVerticalStaggeredGrid(
             columns = StaggeredGridCells.Fixed(2),
-            contentPadding = PaddingValues(16.dp),
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 120.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalItemSpacing = 12.dp,
             modifier = modifier.testTag("notes_skeleton_grid")
         ) {
-            items(skeletonProfiles) { lines ->
+            items(profiles) { lines ->
                 NoteCardSkeleton(brush = brush, bodyLines = lines)
             }
         }
     } else {
         LazyColumn(
-            contentPadding = PaddingValues(16.dp),
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 120.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
             modifier = modifier.testTag("notes_skeleton_list")
         ) {
-            items(skeletonProfiles) { lines ->
+            items(profiles) { lines ->
                 NoteCardSkeleton(brush = brush, bodyLines = lines)
             }
         }

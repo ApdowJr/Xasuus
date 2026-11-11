@@ -68,7 +68,8 @@ class NoteRepository(
         color: String = "purple",
         isPinned: Boolean = false,
         isFavorite: Boolean = false,
-        isArchived: Boolean = false
+        isArchived: Boolean = false,
+        reminderAtMillis: Long? = null
     ): Result<String> {
         val uid = requireUserId()
         val docRef = db.collection("users").document(uid).collection("notes").document()
@@ -82,6 +83,7 @@ class NoteRepository(
             "isFavorite" to isFavorite,
             "isArchived" to isArchived,
             "color" to color.ifBlank { "purple" },
+            "reminderAtMillis" to reminderAtMillis,
             "createdAt" to FieldValue.serverTimestamp(),
             "updatedAt" to FieldValue.serverTimestamp()
         )
@@ -105,7 +107,8 @@ class NoteRepository(
         color: String,
         isPinned: Boolean,
         isFavorite: Boolean,
-        isArchived: Boolean
+        isArchived: Boolean,
+        reminderAtMillis: Long? = null
     ): Result<Unit> {
         val uid = requireUserId()
         require(id.isNotBlank()) { "Note ID cannot be blank for update" }
@@ -119,6 +122,7 @@ class NoteRepository(
             "isFavorite" to isFavorite,
             "isArchived" to isArchived,
             "color" to color.ifBlank { "purple" },
+            "reminderAtMillis" to reminderAtMillis,
             "updatedAt" to FieldValue.serverTimestamp()
         )
         return try {

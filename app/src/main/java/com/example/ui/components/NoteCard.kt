@@ -1,8 +1,10 @@
 package com.example.ui.components
 
-import androidx.compose.foundation.BorderStroke
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,26 +19,27 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Archive
-import androidx.compose.material.icons.filled.Bookmark
-import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Unarchive
 import androidx.compose.material.icons.outlined.PushPin
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SuggestionChip
-import androidx.compose.material3.SuggestionChipDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -46,32 +49,48 @@ import androidx.compose.ui.unit.sp
 import com.example.data.model.Note
 import com.example.ui.theme.AccentAmber
 import com.example.ui.theme.AccentRose
-import com.example.ui.theme.ElectricPurple
-import com.example.ui.theme.NoteColorAmber
-import com.example.ui.theme.NoteColorBlue
-import com.example.ui.theme.NoteColorEmerald
-import com.example.ui.theme.NoteColorIndigo
-import com.example.ui.theme.NoteColorPurple
-import com.example.ui.theme.NoteColorRose
-import com.example.ui.theme.NoteColorSlate
-import com.example.ui.theme.NoteColorTeal
+import com.example.ui.theme.XasuusTheme
 import java.text.SimpleDateFormat
 import java.util.Locale
 
-fun getNoteAccentColor(colorKey: String): Color {
-    return when (colorKey.lowercase()) {
-        "purple" -> NoteColorPurple
-        "blue" -> NoteColorBlue
-        "teal" -> NoteColorTeal
-        "emerald", "green" -> NoteColorEmerald
-        "amber", "orange" -> NoteColorAmber
-        "rose", "red" -> NoteColorRose
-        "indigo" -> NoteColorIndigo
-        "slate", "gray" -> NoteColorSlate
-        else -> NoteColorPurple
+/**
+ * Kept for backwards compatibility with older call sites: maps a stored colour key
+ * to its strong accent colour.
+ */
+fun getNoteAccentColor(colorKey: String): Color = when (colorKey.lowercase()) {
+    "purple" -> Color(0xFF6C4CF1)
+    "blue" -> Color(0xFF3672E0)
+    "teal" -> Color(0xFF0EA394)
+    "emerald", "green" -> Color(0xFF23A26D)
+    "amber", "orange" -> Color(0xFFE09A16)
+    "rose", "red" -> Color(0xFFE44A73)
+    "indigo" -> Color(0xFF5350D6)
+    "slate", "gray", "grey" -> Color(0xFF6B7482)
+    else -> Color(0xFF6C4CF1)
+}
+
+/** Friendly relative date: "Maanta" / "Shalay" / "12 Feb". */
+fun formatNoteDate(note: Note): String {
+    val timestamp = note.updatedAt ?: note.createdAt ?: return ""
+    val date = timestamp.toDate()
+    val now = java.util.Date()
+    val dayMs = 24 * 60 * 60 * 1000L
+    val todayStart = now.time - (now.time % dayMs)
+    val noteStart = date.time - (date.time % dayMs)
+    return when {
+        noteStart >= todayStart -> "Maanta"
+        noteStart >= todayStart - dayMs -> "Shalay"
+        else -> SimpleDateFormat("d MMM", Locale.getDefault()).format(date)
     }
 }
 
+/**
+ * Editorial note card.
+ *
+ * Layout is a deliberate hierarchy: a tinted category strip at the top, the title in display
+ * type, a generous preview of the body, then a footer with tags and quiet actions. Pinned
+ * cards use a solid accent border and a pin badge so they read as "on top of the pile".
+ */
 @Composable
 fun NoteCard(
     note: Note,
@@ -80,187 +99,341 @@ fun NoteCard(
     onToggleFavorite: () -> Unit,
     onToggleArchive: () -> Unit,
     onDelete: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    showCategoryChip: Boolean = true
 ) {
-    val accentColor = remember(note.color) { getNoteAccentColor(note.color) }
-    val formattedDate = remember(note.updatedAt, note.createdAt) {
-        val timestamp = note.updatedAt ?: note.createdAt
-        if (timestamp != null) {
-            val sdf = SimpleDateFormat("MMM d, HH:mm", Locale.getDefault())
-            sdf.format(timestamp.toDate())
-        } else {
-            ""
-        }
-    }
+    val colors = XasuusTheme.colors
+    val tone = toneFor(note.color)
+    val dateLabel = remember(note.updatedAt, note.createdAt) { formatNoteDate(note) }
 
-    Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .testTag("note_card_${note.id}"),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
-        border = BorderStroke(
-            width = if (note.isPinned) 1.5.dp else 1.dp,
-            color = if (note.isPinned) accentColor else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
-        ),
-        elevation = CardDefaults.cardElevation(
-            defaultElevation = if (note.isPinned) 3.dp else 1.dp
-        ),
-        onClick = onClick
-    ) {
+    var menuOpen by remember { mutableStateOf(false) }
+    var pressed by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) 0.978f else 1f,
+        animationSpec = tween(130),
+        label = "note_card_press"
+    )
+    val borderColor by animateColorAsState(
+        targetValue = if (note.isPinned) tone.accent.copy(alpha = 0.55f) else colors.hairline,
+        animationSpec = tween(220),
+        label = "note_card_border"
+    )
+
+    Box(modifier = modifier.scale(scale)) {
         Column(
-            modifier = Modifier.padding(14.dp)
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(22.dp))
+                .background(colors.card)
+                .border(if (note.isPinned) 1.5.dp else 1.dp, borderColor, RoundedCornerShape(22.dp))
+                .testTag("note_card_${note.id}")
+                .pressable(
+                    onPressChange = { pressed = it },
+                    onClick = onClick,
+                    onLongClick = { menuOpen = true }
+                )
         ) {
-            // Header Row: Accent Indicator & Action Icons
+            // ---------------------------------------------------------------- header strip
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 14.dp, end = 8.dp, top = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(
+                    modifier = Modifier.weight(1f),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(10.dp)
-                            .clip(CircleShape)
-                            .background(accentColor)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    if (note.categoryId.isNotBlank() && note.categoryId != "general") {
-                        Text(
-                            text = note.categoryId.replaceFirstChar { it.uppercase() },
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
-                            color = accentColor
-                        )
-                    }
-                }
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(
-                        onClick = onTogglePin,
-                        modifier = Modifier.size(32.dp)
-                    ) {
-                        Icon(
-                            imageVector = if (note.isPinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
-                            contentDescription = if (note.isPinned) "Ka qaad pin-ka" else "Ku dheji pin",
-                            tint = if (note.isPinned) AccentAmber else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-
-                    IconButton(
-                        onClick = onToggleFavorite,
-                        modifier = Modifier.size(32.dp)
-                    ) {
-                        Icon(
-                            imageVector = if (note.isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
-                            contentDescription = if (note.isFavorite) "Ka saar jecleysiga" else "U calaamadee jecleysi",
-                            tint = if (note.isFavorite) AccentRose else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(6.dp))
-
-            // Title
-            Text(
-                text = note.title,
-                style = MaterialTheme.typography.titleMedium.copy(
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 17.sp
-                ),
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-
-            // Content preview
-            if (note.content.isNotBlank()) {
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    text = note.content,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis,
-                    lineHeight = 20.sp
-                )
-            }
-
-            // Tags row
-            if (note.tags.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(10.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    note.tags.take(3).forEach { tag ->
-                        Text(
-                            text = "#$tag",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
+                    if (note.isPinned) {
+                        Box(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f))
-                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                                .clip(CircleShape)
+                                .background(tone.accent.copy(alpha = 0.14f))
+                                .padding(horizontal = 7.dp, vertical = 3.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Filled.PushPin,
+                                    contentDescription = null,
+                                    tint = tone.accent,
+                                    modifier = Modifier.size(10.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "PIN",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontSize = 9.sp,
+                                        letterSpacing = 0.8.sp,
+                                        fontWeight = FontWeight.ExtraBold
+                                    ),
+                                    color = tone.accent
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(6.dp))
+                    }
+                    if (showCategoryChip) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(6.dp)
+                                    .clip(CircleShape)
+                                    .background(tone.accent)
+                            )
+                            Spacer(modifier = Modifier.width(5.dp))
+                            Text(
+                                text = categoryLabel(note.categoryId),
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontSize = 10.sp,
+                                    letterSpacing = 0.5.sp,
+                                    fontWeight = FontWeight.Bold
+                                ),
+                                color = tone.accent,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (note.isFavorite) {
+                        Icon(
+                            imageVector = Icons.Filled.Favorite,
+                            contentDescription = "Jeceshahay",
+                            tint = AccentRose,
+                            modifier = Modifier
+                                .padding(end = 4.dp)
+                                .size(13.dp)
                         )
                     }
-                    if (note.tags.size > 3) {
-                        Text(
-                            text = "+${note.tags.size - 3}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                    if (note.reminderAtMillis != null) {
+                        Icon(
+                            imageVector = Icons.Filled.NotificationsActive,
+                            contentDescription = "Xusuusin la qorsheeyay",
+                            tint = colors.accent,
+                            modifier = Modifier
+                                .padding(end = 4.dp)
+                                .size(13.dp)
                         )
                     }
+                    MiniAction(
+                        icon = if (note.isPinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
+                        tint = if (note.isPinned) AccentAmber else colors.inkFaint,
+                        contentDescription = if (note.isPinned) "Ka qaad pin" else "Pin",
+                        onClick = onTogglePin
+                    )
+                    MiniAction(
+                        icon = if (note.isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                        tint = if (note.isFavorite) AccentRose else colors.inkFaint,
+                        contentDescription = "Jecleysi",
+                        onClick = onToggleFavorite
+                    )
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            // ------------------------------------------------------------------------ body
+            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+                Text(
+                    text = note.title.ifBlank { "Xasuus aan cinwaan lahayn" },
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontSize = 16.sp,
+                        lineHeight = 21.sp,
+                        fontWeight = FontWeight.Bold
+                    ),
+                    color = colors.ink,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis
+                )
 
-            // Footer: Date & Quick Actions
+                if (note.content.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = note.content.trim(),
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontSize = 12.5.sp,
+                            lineHeight = 19.sp
+                        ),
+                        color = colors.inkMuted,
+                        maxLines = 4,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+
+            // ---------------------------------------------------------------------- footer
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, end = 12.dp, bottom = 12.dp, top = 2.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text(
-                    text = formattedDate,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                )
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    if (note.tags.isNotEmpty()) {
+                        note.tags.take(2).forEach { tag ->
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(tone.wash)
+                                    .padding(horizontal = 6.dp, vertical = 3.dp)
+                            ) {
+                                Text(
+                                    text = "#$tag",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontSize = 9.5.sp,
+                                        fontWeight = FontWeight.Bold
+                                    ),
+                                    color = tone.accent,
+                                    maxLines = 1
+                                )
+                            }
+                        }
+                        if (note.tags.size > 2) {
+                            Text(
+                                text = "+${note.tags.size - 2}",
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.5.sp),
+                                color = colors.inkFaint
+                            )
+                        }
+                    } else if (dateLabel.isNotEmpty()) {
+                        Text(
+                            text = dateLabel,
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.5.sp),
+                            color = colors.inkFaint
+                        )
+                    }
+                }
 
-                Row {
-                    IconButton(
-                        onClick = onToggleArchive,
-                        modifier = Modifier.size(28.dp)
-                    ) {
-                        Icon(
-                            imageVector = if (note.isArchived) Icons.Default.Unarchive else Icons.Default.Archive,
-                            contentDescription = if (note.isArchived) "Ka soo saar keydka" else "Geli keydka",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                            modifier = Modifier.size(16.dp)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (dateLabel.isNotEmpty() && note.tags.isNotEmpty()) {
+                        Text(
+                            text = dateLabel,
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.5.sp),
+                            color = colors.inkFaint
                         )
                     }
-                    IconButton(
-                        onClick = onDelete,
-                        modifier = Modifier.size(28.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Delete,
-                            contentDescription = "Tirtir xasuusta",
-                            tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
+                    MiniAction(
+                        icon = androidx.compose.material.icons.Icons.Filled.MoreHoriz,
+                        tint = colors.inkFaint,
+                        contentDescription = "Ficillo dheeraad ah",
+                        onClick = { menuOpen = true }
+                    )
                 }
             }
         }
+
+        DropdownMenu(
+            expanded = menuOpen,
+            onDismissRequest = { menuOpen = false },
+            containerColor = colors.card,
+            shape = RoundedCornerShape(16.dp),
+            border = androidx.compose.foundation.BorderStroke(1.dp, colors.hairline)
+        ) {
+            DropdownMenuItem(
+                text = { Text("Pin / Ka qaad pin", style = MaterialTheme.typography.bodyMedium) },
+                leadingIcon = {
+                    Icon(
+                        imageVector = if (note.isPinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
+                        contentDescription = null,
+                        tint = AccentAmber,
+                        modifier = Modifier.size(18.dp)
+                    )
+                },
+                onClick = {
+                    menuOpen = false
+                    onTogglePin()
+                }
+            )
+            DropdownMenuItem(
+                text = { Text("Jecleysi", style = MaterialTheme.typography.bodyMedium) },
+                leadingIcon = {
+                    Icon(
+                        imageVector = if (note.isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                        contentDescription = null,
+                        tint = AccentRose,
+                        modifier = Modifier.size(18.dp)
+                    )
+                },
+                onClick = {
+                    menuOpen = false
+                    onToggleFavorite()
+                }
+            )
+            DropdownMenuItem(
+                text = {
+                    Text(
+                        text = if (note.isArchived) "Ka soo saar keydka" else "Geli keydka",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                },
+                leadingIcon = {
+                    Icon(
+                        imageVector = if (note.isArchived) Icons.Default.Unarchive else Icons.Default.Archive,
+                        contentDescription = null,
+                        tint = colors.inkMuted,
+                        modifier = Modifier.size(18.dp)
+                    )
+                },
+                onClick = {
+                    menuOpen = false
+                    onToggleArchive()
+                }
+            )
+            DropdownMenuItem(
+                text = {
+                    Text(
+                        text = "Tirtir",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Default.DeleteOutline,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(18.dp)
+                    )
+                },
+                onClick = {
+                    menuOpen = false
+                    onDelete()
+                }
+            )
+        }
     }
+}
+
+@Composable
+private fun MiniAction(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    tint: Color,
+    contentDescription: String,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .size(26.dp)
+            .clip(CircleShape)
+            .clickableCompat(onClick)
+            .padding(4.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = tint,
+            modifier = Modifier.size(14.dp)
+        )
+    }
+}
+
+internal fun categoryLabel(categoryId: String): String {
+    if (categoryId.isBlank() || categoryId.equals("general", ignoreCase = true)) return "GUUD"
+    return categoryId.replace('-', ' ').replace('_', ' ').uppercase()
 }

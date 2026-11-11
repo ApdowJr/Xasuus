@@ -3,11 +3,13 @@ package com.example.ui.auth
 import android.app.Activity
 import android.content.Context
 import android.util.Log
-import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,37 +23,34 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.outlined.CloudDone
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
-import androidx.compose.material3.TabRowDefaults
-import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.Button
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -64,6 +63,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -78,8 +79,11 @@ import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialCancellationException
 import com.example.R
-import com.example.ui.theme.ElectricPurple
-import com.example.ui.theme.VibrantViolet
+import com.example.ui.components.ActionButton
+import com.example.ui.components.Eyebrow
+import com.example.ui.components.SoftCard
+import com.example.ui.components.clickableCompat
+import com.example.ui.theme.XasuusTheme
 import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential.Companion.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
@@ -101,679 +105,523 @@ enum class AuthMode {
 }
 
 @Composable
-fun AuthScreen(
-    onAuthSuccess: () -> Unit
-) {
+fun AuthScreen(onAuthSuccess: () -> Unit) {
     val context = LocalContext.current
-    val coroutineScope = rememberCoroutineScope()
+    val scope = rememberCoroutineScope()
     val credentialManager = remember { CredentialManager.create(context) }
+    val colors = XasuusTheme.colors
 
     var selectedMode by remember { mutableStateOf(AuthMode.CREATE_ACCOUNT) }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
-    var showForgotPasswordDialog by remember { mutableStateOf(false) }
-
-    // Login Form State
+    var showForgotPassword by remember { mutableStateOf(false) }
     var loginEmail by remember { mutableStateOf("") }
     var loginPassword by remember { mutableStateOf("") }
     var loginPasswordVisible by remember { mutableStateOf(false) }
-    var rememberMe by remember { mutableStateOf(true) }
-
-    // Register Form State
     var registerName by remember { mutableStateOf("") }
     var registerEmail by remember { mutableStateOf("") }
     var registerPassword by remember { mutableStateOf("") }
-    var registerPasswordVisible by remember { mutableStateOf(false) }
     var registerConfirmPassword by remember { mutableStateOf("") }
-    var registerConfirmPasswordVisible by remember { mutableStateOf(false) }
+    var registerPasswordVisible by remember { mutableStateOf(false) }
+    var registerConfirmVisible by remember { mutableStateOf(false) }
 
-    Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.background
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .imePadding()
-                .padding(horizontal = 20.dp, vertical = 20.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // App Brand Header
+    Surface(modifier = Modifier.fillMaxSize(), color = colors.canvas) {
+        Box(modifier = Modifier.fillMaxSize()) {
             Box(
                 modifier = Modifier
-                    .size(76.dp)
-                    .clip(RoundedCornerShape(22.dp))
-                    .background(
-                        Brush.linearGradient(
-                            listOf(ElectricPurple, VibrantViolet)
-                        )
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.EditNote,
-                    contentDescription = "MyNotes Icon",
-                    tint = Color.White,
-                    modifier = Modifier.size(46.dp)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            Text(
-                text = "MyNotes",
-                style = MaterialTheme.typography.headlineLarge.copy(
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 28.sp
-                ),
-                color = MaterialTheme.colorScheme.onBackground
+                    .align(Alignment.TopEnd)
+                    .padding(top = 24.dp, end = 16.dp)
+                    .size(190.dp)
+                    .clip(CircleShape)
+                    .background(Brush.radialGradient(listOf(colors.accentWash, Color.Transparent)))
             )
-
-            Text(
-                text = "Xasuus-qor Casri ah oo Ammaan ah",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            // Fast Google 1-Tap Option Card (Always available at the top for immediate access)
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = ElectricPurple.copy(alpha = 0.08f)
-                ),
-                border = androidx.compose.foundation.BorderStroke(1.dp, ElectricPurple.copy(alpha = 0.3f))
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .imePadding()
+                    .padding(horizontal = 22.dp, vertical = 26.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(RoundedCornerShape(15.dp))
+                            .background(colors.canvas)
+                            .border(1.dp, colors.hairline, RoundedCornerShape(15.dp))
+                            .padding(2.dp),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.CheckCircle,
-                            contentDescription = null,
-                            tint = ElectricPurple,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "Habka Tooska ah (Google 1-Taabasho)",
-                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                            color = ElectricPurple
+                        Image(
+                            painter = painterResource(id = com.example.R.drawable.xasuus_logo),
+                            contentDescription = "Astaanta Xasuus",
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier.fillMaxSize()
                         )
                     }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text(
+                            text = "Xasuus",
+                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.ExtraBold),
+                            color = colors.ink
+                        )
+                        Text(
+                            text = "Xasuusahaaga, meel ammaan ah.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = colors.inkMuted
+                        )
+                    }
+                }
 
-                    Spacer(modifier = Modifier.height(8.dp))
-
+                Spacer(modifier = Modifier.height(30.dp))
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Eyebrow(text = "KU SOO DHAWOOW")
+                    Spacer(modifier = Modifier.height(7.dp))
                     Text(
-                        text = "Ku gal ama ku abuur koonto hal taabasho oo toos ugu xiran Firebase",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center
+                        text = if (selectedMode == AuthMode.CREATE_ACCOUNT) "Fikradahaaga meel u samee." else "Ku soo noqo Xasuus.",
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = colors.ink
                     )
+                    Spacer(modifier = Modifier.height(7.dp))
+                    Text(
+                        text = if (selectedMode == AuthMode.CREATE_ACCOUNT)
+                            "Qor, habeey, oo meel kasta kala soco xasuusaha muhiimka kuu ah."
+                        else "Gal koontadaada si aad u sii wadato xasuusahaaga.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = colors.inkMuted
+                    )
+                }
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(22.dp))
 
-                    Button(
+                // Google remains an equal, prominent sign-in path without competing with the form.
+                SoftCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(15.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(38.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(colors.accentWash),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CheckCircle,
+                                contentDescription = null,
+                                tint = colors.accent,
+                                modifier = Modifier.size(19.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(11.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Si fudud ugu gal Google",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = colors.ink
+                            )
+                            Text(
+                                text = "Hal taabasho, ammaan iyo degdeg",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = colors.inkMuted
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(13.dp))
+                    ActionButton(
+                        text = "Ku sii wad Google",
+                        icon = Icons.Default.ArrowForward,
+                        loading = isLoading,
                         onClick = {
                             isLoading = true
                             errorMessage = null
                             onGoogleSignInClicked(
                                 context = context,
                                 credentialManager = credentialManager,
-                                onAuthSuccess = {
-                                    isLoading = false
-                                    onAuthSuccess()
-                                },
-                                onAuthError = { err ->
-                                    isLoading = false
-                                    errorMessage = err
-                                },
-                                scope = coroutineScope,
-                                onAuthCancelled = {
-                                    isLoading = false
-                                }
+                                onAuthSuccess = { isLoading = false; onAuthSuccess() },
+                                onAuthError = { err -> isLoading = false; errorMessage = err },
+                                scope = scope,
+                                onAuthCancelled = { isLoading = false }
                             )
                         },
+                        enabled = !isLoading,
+                        container = colors.inkPill,
+                        contentColor = colors.onInkPill,
+                        modifier = Modifier.fillMaxWidth().height(48.dp).testTag("google_sign_in_button")
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(19.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    HorizontalDivider(modifier = Modifier.weight(1f), color = colors.hairline)
+                    Text(
+                        text = "AMA EMAIL",
+                        style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.4.sp),
+                        color = colors.inkFaint
+                    )
+                    HorizontalDivider(modifier = Modifier.weight(1f), color = colors.hairline)
+                }
+                Spacer(modifier = Modifier.height(17.dp))
+
+                SoftCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(22.dp),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(17.dp)
+                ) {
+                    // Segmented selector
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(48.dp)
-                            .testTag("google_sign_in_button"),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = ElectricPurple
-                        ),
-                        enabled = !isLoading
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(colors.canvas)
+                            .padding(4.dp)
                     ) {
-                        if (isLoading) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(22.dp),
-                                color = Color.White,
-                                strokeWidth = 2.dp
-                            )
-                        } else {
-                            Text(
-                                text = "Ku Gal Google Account",
-                                style = MaterialTheme.typography.titleMedium.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 15.sp
-                                ),
-                                color = Color.White
-                            )
+                        AuthMode.entries.forEach { mode ->
+                            val selected = selectedMode == mode
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(11.dp))
+                                    .background(if (selected) colors.inkPill else Color.Transparent)
+                                    .clickableCompat {
+                                        selectedMode = mode
+                                        errorMessage = null
+                                    }
+                                    .testTag(if (mode == AuthMode.LOGIN) "tab_login" else "tab_create_account")
+                                    .padding(vertical = 11.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = if (mode == AuthMode.LOGIN) "Galitaan" else "Akoon cusub",
+                                    style = MaterialTheme.typography.labelLarge.copy(
+                                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
+                                    ),
+                                    color = if (selected) colors.onInkPill else colors.inkMuted
+                                )
+                            }
                         }
                     }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Or Divider
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                HorizontalDivider(modifier = Modifier.weight(1f))
-                Text(
-                    text = "  AMA BUUXI FOOMKA  ",
-                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                HorizontalDivider(modifier = Modifier.weight(1f))
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Auth Card with Tabs
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(22.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(18.dp)
-                ) {
-                    // Tab Row: Galitaan (Login) vs Abuur Koonto (Register)
-                    TabRow(
-                        selectedTabIndex = selectedMode.ordinal,
-                        containerColor = Color.Transparent,
-                        contentColor = ElectricPurple,
-                        indicator = { tabPositions ->
-                            TabRowDefaults.SecondaryIndicator(
-                                Modifier.tabIndicatorOffset(tabPositions[selectedMode.ordinal]),
-                                color = ElectricPurple
-                            )
-                        }
-                    ) {
-                        Tab(
-                            selected = selectedMode == AuthMode.LOGIN,
-                            onClick = {
-                                selectedMode = AuthMode.LOGIN
-                                errorMessage = null
-                            },
-                            text = {
-                                Text(
-                                    text = "Galitaan (Login)",
-                                    fontWeight = if (selectedMode == AuthMode.LOGIN) FontWeight.Bold else FontWeight.Normal,
-                                    fontSize = 15.sp
-                                )
-                            },
-                            modifier = Modifier.testTag("tab_login")
-                        )
-                        Tab(
-                            selected = selectedMode == AuthMode.CREATE_ACCOUNT,
-                            onClick = {
-                                selectedMode = AuthMode.CREATE_ACCOUNT
-                                errorMessage = null
-                            },
-                            text = {
-                                Text(
-                                    text = "Abuur Koonto",
-                                    fontWeight = if (selectedMode == AuthMode.CREATE_ACCOUNT) FontWeight.Bold else FontWeight.Normal,
-                                    fontSize = 15.sp
-                                )
-                            },
-                            modifier = Modifier.testTag("tab_create_account")
-                        )
-                    }
-
                     Spacer(modifier = Modifier.height(18.dp))
 
-                    // Error Message
                     if (errorMessage != null) {
                         Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.6f),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 14.dp)
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.errorContainer
                         ) {
                             Text(
-                                text = errorMessage!!,
+                                text = errorMessage.orEmpty(),
                                 color = MaterialTheme.colorScheme.error,
                                 style = MaterialTheme.typography.bodySmall,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.padding(10.dp)
+                                modifier = Modifier.padding(12.dp)
                             )
                         }
                     }
 
-                    if (selectedMode == AuthMode.LOGIN) {
-                        // --- LOGIN FORM ---
-                        OutlinedTextField(
-                            value = loginEmail,
-                            onValueChange = {
-                                loginEmail = it
-                                errorMessage = null
-                            },
-                            label = { Text("Email-ka") },
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = Icons.Default.Email,
-                                    contentDescription = null,
-                                    tint = ElectricPurple
+                    AnimatedContent(
+                        targetState = selectedMode,
+                        transitionSpec = { fadeIn() togetherWith fadeOut() },
+                        label = "auth-form"
+                    ) { mode ->
+                        Column {
+                            if (mode == AuthMode.LOGIN) {
+                                AuthField(
+                                    value = loginEmail,
+                                    onValueChange = { loginEmail = it; errorMessage = null },
+                                    label = "Email-kaaga",
+                                    icon = Icons.Default.Email,
+                                    keyboardType = KeyboardType.Email,
+                                    tag = "login_email_input"
                                 )
-                            },
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("login_email_input")
-                        )
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        OutlinedTextField(
-                            value = loginPassword,
-                            onValueChange = {
-                                loginPassword = it
-                                errorMessage = null
-                            },
-                            label = { Text("Furaha Sirta ah (Password)") },
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = Icons.Default.Lock,
-                                    contentDescription = null,
-                                    tint = ElectricPurple
+                                Spacer(modifier = Modifier.height(11.dp))
+                                AuthField(
+                                    value = loginPassword,
+                                    onValueChange = { loginPassword = it; errorMessage = null },
+                                    label = "Furaha sirta ah",
+                                    icon = Icons.Default.Lock,
+                                    keyboardType = KeyboardType.Password,
+                                    password = true,
+                                    passwordVisible = loginPasswordVisible,
+                                    onTogglePassword = { loginPasswordVisible = !loginPasswordVisible },
+                                    tag = "login_password_input"
                                 )
-                            },
-                            trailingIcon = {
-                                IconButton(onClick = { loginPasswordVisible = !loginPasswordVisible }) {
-                                    Icon(
-                                        imageVector = if (loginPasswordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                        contentDescription = "Toggle password visibility"
-                                    )
-                                }
-                            },
-                            visualTransformation = if (loginPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("login_password_input")
-                        )
-
-                        Spacer(modifier = Modifier.height(6.dp))
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Checkbox(
-                                    checked = rememberMe,
-                                    onCheckedChange = { rememberMe = it },
-                                    colors = CheckboxDefaults.colors(checkedColor = ElectricPurple)
-                                )
-                                Text(
-                                    text = "I xasuuso",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            Text(
-                                text = "Ha iloobin furaha?",
-                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
-                                color = ElectricPurple,
-                                modifier = Modifier
-                                    .clickable { showForgotPasswordDialog = true }
-                                    .padding(4.dp)
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(14.dp))
-
-                        Button(
-                            onClick = {
-                                val cleanEmail = loginEmail.trim()
-                                val cleanPass = loginPassword.trim()
-                                if (cleanEmail.isBlank() || !cleanEmail.contains("@")) {
-                                    errorMessage = "Fadlan geli email sax ah"
-                                    return@Button
-                                }
-                                if (cleanPass.length < 6) {
-                                    errorMessage = "Furaha sirta ah waa inuu ahaadaa ugu yaraan 6 xaraf"
-                                    return@Button
-                                }
-                                isLoading = true
-                                errorMessage = null
-                                performEmailLogin(
-                                    email = cleanEmail,
-                                    pass = cleanPass,
-                                    scope = coroutineScope,
-                                    onAuthSuccess = {
-                                        isLoading = false
-                                        onAuthSuccess()
-                                    },
-                                    onAuthError = { err ->
-                                        isLoading = false
-                                        errorMessage = err
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 10.dp),
+                                    horizontalArrangement = Arrangement.End
+                                ) {
+                                    TextButton(onClick = { showForgotPassword = true }) {
+                                        Text("Furaha ma illowday?", color = colors.accent)
                                     }
-                                )
-                            },
-                            enabled = !isLoading,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(50.dp)
-                                .testTag("login_submit_button"),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = ElectricPurple)
-                        ) {
-                            if (isLoading) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(22.dp),
-                                    color = Color.White,
-                                    strokeWidth = 2.dp
+                                }
+                                ActionButton(
+                                    text = "Gal koontada",
+                                    icon = Icons.Default.ArrowForward,
+                                    onClick = {
+                                        val email = loginEmail.trim()
+                                        val pass = loginPassword.trim()
+                                        if (email.isBlank() || !email.contains("@")) {
+                                            errorMessage = "Fadlan geli email sax ah"
+                                            return@ActionButton
+                                        }
+                                        if (pass.length < 6) {
+                                            errorMessage = "Furaha sirta ah waa inuu ahaadaa ugu yaraan 6 xaraf"
+                                            return@ActionButton
+                                        }
+                                        isLoading = true
+                                        errorMessage = null
+                                        performEmailLogin(
+                                            email = email,
+                                            pass = pass,
+                                            scope = scope,
+                                            onAuthSuccess = { isLoading = false; onAuthSuccess() },
+                                            onAuthError = { err -> isLoading = false; errorMessage = err }
+                                        )
+                                    },
+                                    enabled = !isLoading,
+                                    loading = isLoading,
+                                    modifier = Modifier.fillMaxWidth().height(50.dp).testTag("login_submit_button")
                                 )
                             } else {
-                                Text(
-                                    text = "Gal (Sign In)",
-                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                                AuthField(
+                                    value = registerName,
+                                    onValueChange = { registerName = it; errorMessage = null },
+                                    label = "Magacaaga oo buuxa",
+                                    icon = Icons.Default.Person,
+                                    tag = "register_name_input"
                                 )
-                            }
-                        }
-
-                    } else {
-                        // --- CREATE ACCOUNT FORM ---
-                        OutlinedTextField(
-                            value = registerName,
-                            onValueChange = {
-                                registerName = it
-                                errorMessage = null
-                            },
-                            label = { Text("Magacaaga oo Buuxa") },
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = Icons.Default.Person,
-                                    contentDescription = null,
-                                    tint = ElectricPurple
+                                Spacer(modifier = Modifier.height(11.dp))
+                                AuthField(
+                                    value = registerEmail,
+                                    onValueChange = { registerEmail = it; errorMessage = null },
+                                    label = "Email-kaaga",
+                                    icon = Icons.Default.Email,
+                                    keyboardType = KeyboardType.Email,
+                                    tag = "register_email_input"
                                 )
-                            },
-                            singleLine = true,
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("register_name_input")
-                        )
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        OutlinedTextField(
-                            value = registerEmail,
-                            onValueChange = {
-                                registerEmail = it
-                                errorMessage = null
-                            },
-                            label = { Text("Email-kaaga") },
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = Icons.Default.Email,
-                                    contentDescription = null,
-                                    tint = ElectricPurple
+                                Spacer(modifier = Modifier.height(11.dp))
+                                AuthField(
+                                    value = registerPassword,
+                                    onValueChange = { registerPassword = it; errorMessage = null },
+                                    label = "Furaha sirta ah",
+                                    icon = Icons.Default.Lock,
+                                    keyboardType = KeyboardType.Password,
+                                    password = true,
+                                    passwordVisible = registerPasswordVisible,
+                                    onTogglePassword = { registerPasswordVisible = !registerPasswordVisible },
+                                    tag = "register_password_input"
                                 )
-                            },
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("register_email_input")
-                        )
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        OutlinedTextField(
-                            value = registerPassword,
-                            onValueChange = {
-                                registerPassword = it
-                                errorMessage = null
-                            },
-                            label = { Text("Furaha Sirta ah (Password)") },
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = Icons.Default.Lock,
-                                    contentDescription = null,
-                                    tint = ElectricPurple
+                                Spacer(modifier = Modifier.height(11.dp))
+                                AuthField(
+                                    value = registerConfirmPassword,
+                                    onValueChange = { registerConfirmPassword = it; errorMessage = null },
+                                    label = "Xaqiiji furaha sirta ah",
+                                    icon = Icons.Default.Lock,
+                                    keyboardType = KeyboardType.Password,
+                                    password = true,
+                                    passwordVisible = registerConfirmVisible,
+                                    onTogglePassword = { registerConfirmVisible = !registerConfirmVisible },
+                                    tag = "register_confirm_password_input"
                                 )
-                            },
-                            trailingIcon = {
-                                IconButton(onClick = { registerPasswordVisible = !registerPasswordVisible }) {
-                                    Icon(
-                                        imageVector = if (registerPasswordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                        contentDescription = null
-                                    )
-                                }
-                            },
-                            visualTransformation = if (registerPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("register_password_input")
-                        )
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        OutlinedTextField(
-                            value = registerConfirmPassword,
-                            onValueChange = {
-                                registerConfirmPassword = it
-                                errorMessage = null
-                            },
-                            label = { Text("Xaqiiji Furaha Sirta ah") },
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = Icons.Default.Lock,
-                                    contentDescription = null,
-                                    tint = ElectricPurple
-                                )
-                            },
-                            trailingIcon = {
-                                IconButton(onClick = { registerConfirmPasswordVisible = !registerConfirmPasswordVisible }) {
-                                    Icon(
-                                        imageVector = if (registerConfirmPasswordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                        contentDescription = null
-                                    )
-                                }
-                            },
-                            visualTransformation = if (registerConfirmPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("register_confirm_password_input")
-                        )
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        Button(
-                            onClick = {
-                                val cleanName = registerName.trim()
-                                val cleanEmail = registerEmail.trim()
-                                val cleanPass = registerPassword.trim()
-                                val cleanConfirm = registerConfirmPassword.trim()
-
-                                if (cleanName.isBlank()) {
-                                    errorMessage = "Fadlan qor magacaaga"
-                                    return@Button
-                                }
-                                if (cleanEmail.isBlank() || !cleanEmail.contains("@")) {
-                                    errorMessage = "Fadlan geli email sax ah"
-                                    return@Button
-                                }
-                                if (cleanPass.length < 6) {
-                                    errorMessage = "Furaha sirta ah waa inuu ahaadaa ugu yaraan 6 xaraf"
-                                    return@Button
-                                }
-                                if (cleanPass != cleanConfirm) {
-                                    errorMessage = "Labada fure isma laha, fadlan hubi"
-                                    return@Button
-                                }
-                                isLoading = true
-                                errorMessage = null
-                                performEmailRegister(
-                                    name = cleanName,
-                                    email = cleanEmail,
-                                    pass = cleanPass,
-                                    scope = coroutineScope,
-                                    onAuthSuccess = {
-                                        isLoading = false
-                                        onAuthSuccess()
+                                Spacer(modifier = Modifier.height(17.dp))
+                                ActionButton(
+                                    text = "Abuur koonto",
+                                    icon = Icons.Default.ArrowForward,
+                                    onClick = {
+                                        val name = registerName.trim()
+                                        val email = registerEmail.trim()
+                                        val pass = registerPassword.trim()
+                                        val confirm = registerConfirmPassword.trim()
+                                        when {
+                                            name.isBlank() -> errorMessage = "Fadlan qor magacaaga"
+                                            email.isBlank() || !email.contains("@") -> errorMessage = "Fadlan geli email sax ah"
+                                            pass.length < 6 -> errorMessage = "Furaha sirta ah waa inuu ahaadaa ugu yaraan 6 xaraf"
+                                            pass != confirm -> errorMessage = "Labada fure isma laha, fadlan hubi"
+                                            else -> {
+                                                isLoading = true
+                                                errorMessage = null
+                                                performEmailRegister(
+                                                    name = name,
+                                                    email = email,
+                                                    pass = pass,
+                                                    scope = scope,
+                                                    onAuthSuccess = { isLoading = false; onAuthSuccess() },
+                                                    onAuthError = { err -> isLoading = false; errorMessage = err }
+                                                )
+                                            }
+                                        }
                                     },
-                                    onAuthError = { err ->
-                                        isLoading = false
-                                        errorMessage = err
-                                    }
-                                )
-                            },
-                            enabled = !isLoading,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(50.dp)
-                                .testTag("register_submit_button"),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = ElectricPurple)
-                        ) {
-                            if (isLoading) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(22.dp),
-                                    color = Color.White,
-                                    strokeWidth = 2.dp
-                                )
-                            } else {
-                                Text(
-                                    text = "Abuur Koontada (Register)",
-                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                                    enabled = !isLoading,
+                                    loading = isLoading,
+                                    modifier = Modifier.fillMaxWidth().height(50.dp).testTag("register_submit_button")
                                 )
                             }
                         }
                     }
                 }
+
+                Spacer(modifier = Modifier.height(20.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.CloudDone,
+                        contentDescription = null,
+                        tint = colors.inkFaint,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Xasuusahaagu si ammaan ah ayay cloud-ka ugu kaydsan yihiin.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = colors.inkFaint,
+                        textAlign = TextAlign.Center
+                    )
+                }
+                Spacer(modifier = Modifier.height(12.dp))
             }
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            Text(
-                text = "Xogtaadu waxay ku kaydsan tahay Cloud Firestore si ammaan ah",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 
-    // Forgot Password Dialog
-    if (showForgotPasswordDialog) {
-        var resetEmail by remember { mutableStateOf(loginEmail) }
-        var resetMessage by remember { mutableStateOf<String?>(null) }
-        var resetLoading by remember { mutableStateOf(false) }
-
-        AlertDialog(
-            onDismissRequest = { showForgotPasswordDialog = false },
-            title = { Text("Dib u Dejinta Furaha Sirta ah") },
-            text = {
-                Column {
-                    Text(
-                        text = "Geli email-kaaga si aan kuugu soo dirno link-ga aad ku beddesho furaha sirta ah:"
-                    )
-                    Spacer(modifier = Modifier.height(10.dp))
-                    OutlinedTextField(
-                        value = resetEmail,
-                        onValueChange = { resetEmail = it },
-                        label = { Text("Email-kaaga") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    if (resetMessage != null) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = resetMessage!!,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = ElectricPurple
-                        )
-                    }
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        val clean = resetEmail.trim()
-                        if (clean.isBlank() || !clean.contains("@")) {
-                            resetMessage = "Fadlan geli email sax ah"
-                            return@Button
-                        }
-                        resetLoading = true
-                        coroutineScope.launch {
-                            try {
-                                Firebase.auth.sendPasswordResetEmail(clean).await()
-                                resetLoading = false
-                                resetMessage = "Link-ga dib u dejinta waxaa loo diray $clean. Fadlan email-kaaga fiiri!"
-                            } catch (e: Exception) {
-                                resetLoading = false
-                                resetMessage = e.localizedMessage ?: "Khalad ayaa dhacay"
-                            }
-                        }
-                    },
-                    enabled = !resetLoading,
-                    colors = ButtonDefaults.buttonColors(containerColor = ElectricPurple)
-                ) {
-                    if (resetLoading) {
-                        CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White)
-                    } else {
-                        Text("Dir Link-ga")
-                    }
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showForgotPasswordDialog = false }) {
-                    Text("Xir")
-                }
-            }
+    if (showForgotPassword) {
+        ForgotPasswordDialog(
+            initialEmail = loginEmail,
+            scope = scope,
+            onDismiss = { showForgotPassword = false }
         )
     }
 }
 
+@Composable
+private fun AuthField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    keyboardType: KeyboardType = KeyboardType.Text,
+    password: Boolean = false,
+    passwordVisible: Boolean = false,
+    onTogglePassword: (() -> Unit)? = null,
+    tag: String
+) {
+    val colors = XasuusTheme.colors
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        label = { Text(label) },
+        leadingIcon = { Icon(icon, contentDescription = null, tint = colors.inkMuted) },
+        trailingIcon = if (password) {
+            {
+                IconButton(onClick = { onTogglePassword?.invoke() }) {
+                    Icon(
+                        imageVector = if (passwordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                        contentDescription = if (passwordVisible) "Qari furaha" else "Muuji furaha",
+                        tint = colors.inkMuted
+                    )
+                }
+            }
+        } else null,
+        visualTransformation = if (password && !passwordVisible) PasswordVisualTransformation() else VisualTransformation.None,
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+        shape = RoundedCornerShape(14.dp),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = colors.accent,
+            unfocusedBorderColor = colors.hairline,
+            focusedLabelColor = colors.accent,
+            unfocusedLabelColor = colors.inkFaint,
+            cursorColor = colors.accent,
+            focusedTextColor = colors.ink,
+            unfocusedTextColor = colors.ink,
+            focusedContainerColor = colors.card,
+            unfocusedContainerColor = colors.card
+        ),
+        modifier = Modifier.fillMaxWidth().testTag(tag)
+    )
+}
+
+@Composable
+private fun ForgotPasswordDialog(
+    initialEmail: String,
+    scope: CoroutineScope,
+    onDismiss: () -> Unit
+) {
+    val colors = XasuusTheme.colors
+    var email by remember { mutableStateOf(initialEmail) }
+    var message by remember { mutableStateOf<String?>(null) }
+    var loading by remember { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(24.dp),
+        containerColor = colors.card,
+        title = { Text("Dib u deji furaha", color = colors.ink) },
+        text = {
+            Column {
+                Text(
+                    text = "Geli email-kaaga. Waxaan kuu soo diraynaa link aad ku samaysato fure cusub.",
+                    color = colors.inkMuted,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                AuthField(
+                    value = email,
+                    onValueChange = { email = it; message = null },
+                    label = "Email-kaaga",
+                    icon = Icons.Default.Email,
+                    keyboardType = KeyboardType.Email,
+                    tag = "forgot_password_email_input"
+                )
+                if (message != null) {
+                    Spacer(modifier = Modifier.height(9.dp))
+                    Text(message.orEmpty(), color = colors.accent, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val clean = email.trim()
+                    if (clean.isBlank() || !clean.contains("@")) {
+                        message = "Fadlan geli email sax ah"
+                    } else {
+                        loading = true
+                        scope.launch {
+                            try {
+                                Firebase.auth.sendPasswordResetEmail(clean).await()
+                                message = "Link-ga dib u dejinta waxaa loo diray $clean. Fadlan email-kaaga fiiri!"
+                            } catch (e: Exception) {
+                                message = e.localizedMessage ?: "Khalad ayaa dhacay"
+                            } finally {
+                                loading = false
+                            }
+                        }
+                    }
+                },
+                enabled = !loading,
+                colors = ButtonDefaults.buttonColors(containerColor = colors.inkPill),
+                shape = RoundedCornerShape(13.dp)
+            ) {
+                if (loading) CircularProgressIndicator(modifier = Modifier.size(17.dp), color = colors.onInkPill, strokeWidth = 2.dp)
+                else Text("Dir link-ga", color = colors.onInkPill)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Xir", color = colors.inkMuted) }
+        }
+    )
+}
 fun onGoogleSignInClicked(
     context: Context,
     credentialManager: CredentialManager,
@@ -832,7 +680,6 @@ fun performSignOut(
         }
     }
 }
-
 fun performEmailRegister(
     name: String,
     email: String,
