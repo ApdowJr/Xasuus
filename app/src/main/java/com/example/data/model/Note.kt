@@ -13,9 +13,13 @@ data class Note(
     val content: String = "",
     val categoryId: String = "general",
     val tags: List<String> = emptyList(),
+    val checklist: List<ChecklistEntry> = emptyList(),
+    val attachments: List<String> = emptyList(),
     val isPinned: Boolean = false,
     val isFavorite: Boolean = false,
     val isArchived: Boolean = false,
+    val isDeleted: Boolean = false,
+    val deletedAtMillis: Long? = null,
     val color: String = "purple",
     /** Unix epoch millis for an optional local notification reminder. */
     val reminderAtMillis: Long? = null,

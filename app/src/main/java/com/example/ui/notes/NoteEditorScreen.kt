@@ -5,6 +5,8 @@ import android.app.TimePickerDialog
 import android.content.Context
 import android.os.Build
 import android.content.pm.PackageManager
+import android.media.MediaRecorder
+import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -46,10 +48,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Archive
+import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.StopCircle
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.PushPin
@@ -57,6 +63,7 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Unarchive
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -87,6 +94,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.Category
+import com.example.data.model.ChecklistEntry
 import com.example.data.model.Note
 import com.example.ui.components.ActionButton
 import com.example.ui.components.Eyebrow
@@ -118,7 +126,8 @@ fun NoteEditorScreen(
     initialNote: Note?,
     categories: List<Category>,
     onBack: () -> Unit,
-    onShare: (title: String, content: String, tags: List<String>) -> Unit,
+    onShare: (title: String, content: String, tags: List<String>, checklist: List<ChecklistEntry>) -> Unit,
+    onExportPdf: (title: String, content: String, tags: List<String>, checklist: List<ChecklistEntry>) -> Unit,
     onSave: (
         title: String,
         content: String,
@@ -128,7 +137,10 @@ fun NoteEditorScreen(
         isPinned: Boolean,
         isFavorite: Boolean,
         isArchived: Boolean,
-        reminderAtMillis: Long?
+        reminderAtMillis: Long?,
+        checklist: List<ChecklistEntry>,
+        attachments: List<String>,
+        newAttachmentUris: List<String>
     ) -> Unit,
     onDelete: (() -> Unit)?
 ) {
@@ -149,6 +161,22 @@ fun NoteEditorScreen(
             if (initialNote != null) addAll(initialNote.tags)
         }
     }
+    val checklist = remember {
+        mutableStateListOf<ChecklistEntry>().apply {
+            if (initialNote != null) addAll(initialNote.checklist)
+        }
+    }
+    var checklistInput by remember { mutableStateOf("") }
+    var checklistError by remember { mutableStateOf<String?>(null) }
+    var checklistEnabled by remember { mutableStateOf(initialNote?.checklist?.isNotEmpty() == true) }
+    val attachments = remember {
+        mutableStateListOf<String>().apply { initialNote?.attachments?.let { addAll(it) } }
+    }
+    val newAttachmentUris = remember { mutableStateListOf<String>() }
+    var recorder by remember { mutableStateOf<MediaRecorder?>(null) }
+    var recordingPath by remember { mutableStateOf<String?>(null) }
+    var isRecording by remember { mutableStateOf(false) }
+    var attachmentError by remember { mutableStateOf<String?>(null) }
     var newTagInput by remember { mutableStateOf("") }
     var showTagDialog by remember { mutableStateOf(false) }
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
@@ -156,6 +184,69 @@ fun NoteEditorScreen(
     var reminderAtMillis by remember { mutableStateOf(initialNote?.reminderAtMillis) }
     var reminderError by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
+    fun beginAudioRecording() {
+        try {
+            val outputFile = java.io.File(context.cacheDir, "xasuus_voice_${System.currentTimeMillis()}.m4a")
+            val media = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) MediaRecorder(context) else MediaRecorder()
+            media.setAudioSource(MediaRecorder.AudioSource.MIC)
+            media.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+            media.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+            media.setOutputFile(outputFile.absolutePath)
+            media.prepare()
+            media.start()
+            recorder = media
+            recordingPath = outputFile.absolutePath
+            isRecording = true
+            attachmentError = null
+        } catch (error: Exception) {
+            recorder?.release()
+            recorder = null
+            isRecording = false
+            attachmentError = error.localizedMessage ?: "Cod duubistu ma bilaaban."
+        }
+    }
+    fun stopAudioRecording() {
+        val activeRecorder = recorder ?: return
+        try {
+            activeRecorder.stop()
+            if (attachments.size + newAttachmentUris.size < 30) {
+                recordingPath?.let { newAttachmentUris.add(Uri.fromFile(java.io.File(it)).toString()) }
+                attachmentError = null
+            } else {
+                recordingPath?.let { java.io.File(it).delete() }
+                attachmentError = "Ugu badnaan 30 lifaaq ayaa qoraal lagu dari karaa."
+            }
+        } catch (error: Exception) {
+            attachmentError = "Codku aad buu u gaabnaa; isku day mar kale."
+            recordingPath?.let { java.io.File(it).delete() }
+        } finally {
+            activeRecorder.release()
+            recorder = null
+            recordingPath = null
+            isRecording = false
+        }
+    }
+    val audioPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) beginAudioRecording() else attachmentError = "Oggolaanshaha makarafoonka waa la diiday."
+    }
+    val attachmentPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetMultipleContents()
+    ) { picked ->
+        val capacity = (30 - attachments.size - newAttachmentUris.size).coerceAtLeast(0)
+        newAttachmentUris.addAll(picked.take(capacity).map { it.toString() })
+        if (picked.size > capacity) attachmentError = "Ugu badnaan 30 lifaaq ayaa qoraal lagu dari karaa."
+    }
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        onDispose {
+            recorder?.let { active ->
+                runCatching { active.stop() }
+                active.release()
+            }
+            recorder = null
+        }
+    }
     val reminderPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
@@ -240,10 +331,18 @@ fun NoteEditorScreen(
                 }
 
                 SoftIconButton(
+                    icon = Icons.Default.PictureAsPdf,
+                    contentDescription = "U dhoofso PDF",
+                    onClick = { onExportPdf(title, content, tags.toList(), checklist.toList()) },
+                    size = 34.dp,
+                    iconSize = 16.dp
+                )
+                Spacer(modifier = Modifier.width(3.dp))
+                SoftIconButton(
                     icon = Icons.Default.Share,
                     contentDescription = "La wadaag xasuusta",
-                    onClick = { onShare(title, content, tags.toList()) },
-                    size = 36.dp,
+                    onClick = { onShare(title, content, tags.toList(), checklist.toList()) },
+                    size = 34.dp,
                     iconSize = 16.dp
                 )
                 Spacer(modifier = Modifier.width(4.dp))
@@ -279,7 +378,10 @@ fun NoteEditorScreen(
                                 isPinned,
                                 isFavorite,
                                 isArchived,
-                                reminderAtMillis
+                                reminderAtMillis,
+                                checklist.toList(),
+                                attachments.toList(),
+                                newAttachmentUris.toList()
                             )
                         }
                     }
@@ -378,6 +480,153 @@ fun NoteEditorScreen(
                 }
 
                 Spacer(modifier = Modifier.height(20.dp))
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(colors.recessed)
+                        .padding(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().clickableCompat { checklistEnabled = !checklistEnabled },
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier.size(30.dp).clip(RoundedCornerShape(9.dp)).background(colors.accentWash),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.Check, contentDescription = null, tint = colors.accent, modifier = Modifier.size(16.dp))
+                        }
+                        Spacer(modifier = Modifier.width(9.dp))
+                        Text("Liis hawleed", style = MaterialTheme.typography.labelLarge, color = colors.ink, modifier = Modifier.weight(1f))
+                        Text(
+                            text = if (checklist.isEmpty()) "Ku dar" else "${checklist.count { it.isChecked }}/${checklist.size}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = colors.accent
+                        )
+                    }
+                    if (checklistEnabled) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        checklist.forEachIndexed { index, item ->
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Checkbox(
+                                    checked = item.isChecked,
+                                    onCheckedChange = { checked -> checklist[index] = item.copy(isChecked = checked) }
+                                )
+                                BasicTextField(
+                                    value = item.text,
+                                    onValueChange = { text -> checklist[index] = item.copy(text = text) },
+                                    textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                        color = if (item.isChecked) colors.inkFaint else colors.ink
+                                    ),
+                                    singleLine = true,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Box(
+                                    modifier = Modifier.size(30.dp).clip(CircleShape)
+                                        .clickableCompat { checklist.removeAt(index) },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(Icons.Default.Close, contentDescription = "Ka saar hawsha", tint = colors.inkFaint, modifier = Modifier.size(14.dp))
+                                }
+                            }
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(start = 12.dp, top = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(modifier = Modifier.weight(1f).clip(RoundedCornerShape(10.dp)).background(colors.card).padding(horizontal = 11.dp, vertical = 10.dp)) {
+                                if (checklistInput.isBlank()) Text("Hawl cusub…", style = MaterialTheme.typography.bodySmall, color = colors.inkFaint)
+                                BasicTextField(
+                                    value = checklistInput,
+                                    onValueChange = { checklistInput = it },
+                                    singleLine = true,
+                                    textStyle = MaterialTheme.typography.bodySmall.copy(color = colors.ink),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                            Box(
+                                modifier = Modifier.size(38.dp).clip(CircleShape).clickableCompat {
+                                    val text = checklistInput.trim()
+                                    if (text.isNotEmpty() && checklist.size < 100) {
+                                        checklist.add(ChecklistEntry(id = java.util.UUID.randomUUID().toString(), text = text))
+                                        checklistInput = ""
+                                        checklistError = null
+                                    } else if (checklist.size >= 100) {
+                                        checklistError = "Liisku wuxuu qaadi karaa ugu badnaan 100 hawlood."
+                                    }
+                                },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = "Ku dar hawl", tint = colors.accent)
+                            }
+                        }
+                    }
+                    if (checklistError != null) {
+                        Text(checklistError.orEmpty(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Column(
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
+                        .background(colors.card).border(1.dp, colors.hairline, RoundedCornerShape(16.dp)).padding(12.dp)
+                ) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        ActionButton(
+                            text = "Ku dar lifaaq",
+                            icon = Icons.Default.AttachFile,
+                            height = 42.dp,
+                            onClick = { attachmentPicker.launch("*/*") },
+                            container = colors.recessed,
+                            contentColor = colors.ink,
+                            modifier = Modifier.weight(1f)
+                        )
+                        ActionButton(
+                            text = if (isRecording) "Jooji duubista" else "Duub cod",
+                            icon = if (isRecording) Icons.Default.StopCircle else Icons.Default.Mic,
+                            height = 42.dp,
+                            onClick = {
+                                if (isRecording) stopAudioRecording()
+                                else if (ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) beginAudioRecording()
+                                else audioPermissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+                            },
+                            container = if (isRecording) MaterialTheme.colorScheme.errorContainer else colors.accentWash,
+                            contentColor = if (isRecording) MaterialTheme.colorScheme.error else colors.accent,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    if (attachments.isNotEmpty() || newAttachmentUris.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        (attachments.toList() + newAttachmentUris.toList()).forEachIndexed { index, source ->
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
+                                Icon(Icons.Default.AttachFile, contentDescription = null, tint = colors.accent, modifier = Modifier.size(15.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = Uri.parse(source).lastPathSegment?.substringAfterLast('/')?.takeLast(24) ?: "Lifaaq",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = colors.inkMuted,
+                                    modifier = Modifier.weight(1f),
+                                    maxLines = 1
+                                )
+                                Box(
+                                    modifier = Modifier.size(28.dp).clip(CircleShape).clickableCompat {
+                                        if (index < attachments.size) attachments.removeAt(index)
+                                        else newAttachmentUris.removeAt(index - attachments.size)
+                                    },
+                                    contentAlignment = Alignment.Center
+                                ) { Icon(Icons.Default.Close, contentDescription = "Ka saar lifaaqa", tint = colors.inkFaint, modifier = Modifier.size(14.dp)) }
+                            }
+                        }
+                    }
+                    if (attachmentError != null) {
+                        Text(attachmentError.orEmpty(), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
 
                 Row(
                     modifier = Modifier
@@ -743,7 +992,7 @@ fun NoteEditorScreen(
             title = { Text("Tirtir xasuusta?", style = MaterialTheme.typography.titleLarge) },
             text = {
                 Text(
-                    text = "Xasuustan dib looma soo celin karo marka la tirtiro.",
+                    text = "Xasuustan waxaa loo rarayaa qashinka; waad ka soo celin kartaa tab-ka Qashin.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = colors.inkMuted
                 )

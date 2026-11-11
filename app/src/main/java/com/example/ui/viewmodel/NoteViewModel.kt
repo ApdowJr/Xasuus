@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.data.model.Category
+import com.example.data.model.ChecklistEntry
 import com.example.data.model.Note
 import com.example.data.repository.NoteRepository
 import com.example.ui.state.NotesTab
@@ -80,10 +81,11 @@ class NoteViewModel(
 
         allNotes.filter { note ->
             val matchesTab = when (tab) {
-                NotesTab.ALL -> !note.isArchived
-                NotesTab.PINNED -> note.isPinned && !note.isArchived
-                NotesTab.FAVORITES -> note.isFavorite && !note.isArchived
-                NotesTab.ARCHIVED -> note.isArchived
+                NotesTab.TRASH -> note.isDeleted
+                NotesTab.ALL -> !note.isDeleted && !note.isArchived
+                NotesTab.PINNED -> !note.isDeleted && note.isPinned && !note.isArchived
+                NotesTab.FAVORITES -> !note.isDeleted && note.isFavorite && !note.isArchived
+                NotesTab.ARCHIVED -> !note.isDeleted && note.isArchived
             }
             val matchesCategory = categoryId == null || note.categoryId.equals(categoryId, ignoreCase = true)
             val matchesQuery = trimmedQuery.isEmpty() ||
@@ -127,6 +129,8 @@ class NoteViewModel(
         isPinned: Boolean,
         isFavorite: Boolean,
         reminderAtMillis: Long? = null,
+        checklist: List<ChecklistEntry> = emptyList(),
+        attachments: List<String> = emptyList(),
         onSuccess: (String) -> Unit = {}
     ) {
         viewModelScope.launch {
@@ -138,7 +142,9 @@ class NoteViewModel(
                 color = color,
                 isPinned = isPinned,
                 isFavorite = isFavorite,
-                reminderAtMillis = reminderAtMillis
+                reminderAtMillis = reminderAtMillis,
+                checklist = checklist,
+                attachments = attachments
             )
             result.onSuccess { id ->
                 _operationMessage.value = "Xasuusta si guul leh ayaa loo kaydiyay!"
@@ -160,6 +166,8 @@ class NoteViewModel(
         isFavorite: Boolean,
         isArchived: Boolean,
         reminderAtMillis: Long? = null,
+        checklist: List<ChecklistEntry> = emptyList(),
+        attachments: List<String> = emptyList(),
         onSuccess: () -> Unit = {}
     ) {
         viewModelScope.launch {
@@ -173,7 +181,9 @@ class NoteViewModel(
                 isPinned = isPinned,
                 isFavorite = isFavorite,
                 isArchived = isArchived,
-                reminderAtMillis = reminderAtMillis
+                reminderAtMillis = reminderAtMillis,
+                checklist = checklist,
+                attachments = attachments
             )
             result.onSuccess {
                 _operationMessage.value = "Xasuusta waa la cusbooneysiiyay!"
@@ -202,12 +212,33 @@ class NoteViewModel(
         }
     }
 
+    /** Soft delete so a mistaken delete can always be recovered from the trash tab. */
     fun deleteNote(noteId: String, onSuccess: () -> Unit = {}) {
         viewModelScope.launch {
-            val result = repository.deleteNote(noteId)
+            val result = repository.moveNoteToTrash(noteId)
             result.onSuccess {
-                _operationMessage.value = "Xasuusta waa la tirtiray!"
+                _operationMessage.value = "Xasuusta waxaa loo raray qashinka."
                 onSuccess()
+            }.onFailure { e ->
+                _operationMessage.value = "Khalad: ${e.localizedMessage}"
+            }
+        }
+    }
+
+    fun restoreNote(noteId: String) {
+        viewModelScope.launch {
+            repository.restoreNote(noteId).onSuccess {
+                _operationMessage.value = "Xasuusta waa la soo celiyay."
+            }.onFailure { e ->
+                _operationMessage.value = "Khalad: ${e.localizedMessage}"
+            }
+        }
+    }
+
+    fun permanentlyDeleteNote(noteId: String) {
+        viewModelScope.launch {
+            repository.permanentlyDeleteNote(noteId).onSuccess {
+                _operationMessage.value = "Xasuusta si joogto ah ayaa loo tirtiray."
             }.onFailure { e ->
                 _operationMessage.value = "Khalad: ${e.localizedMessage}"
             }

@@ -19,6 +19,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Archive
+import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
@@ -100,7 +102,9 @@ fun NoteCard(
     onToggleArchive: () -> Unit,
     onDelete: () -> Unit,
     modifier: Modifier = Modifier,
-    showCategoryChip: Boolean = true
+    showCategoryChip: Boolean = true,
+    onRestore: () -> Unit = {},
+    onDeleteForever: () -> Unit = {}
 ) {
     val colors = XasuusTheme.colors
     val tone = toneFor(note.color)
@@ -196,7 +200,21 @@ fun NoteCard(
                     }
                 }
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                if (note.isDeleted) {
+                    Text(
+                        text = "QASHIN",
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, letterSpacing = 0.8.sp),
+                        color = MaterialTheme.colorScheme.error
+                    )
+                } else Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (note.attachments.isNotEmpty()) {
+                        Icon(
+                            imageVector = Icons.Default.AttachFile,
+                            contentDescription = "${note.attachments.size} lifaaq",
+                            tint = colors.inkFaint,
+                            modifier = Modifier.padding(end = 4.dp).size(13.dp)
+                        )
+                    }
                     if (note.isFavorite) {
                         Icon(
                             imageVector = Icons.Filled.Favorite,
@@ -258,6 +276,18 @@ fun NoteCard(
                         maxLines = 4,
                         overflow = TextOverflow.Ellipsis
                     )
+                }
+                if (note.checklist.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.CheckCircle, contentDescription = null, tint = tone.accent, modifier = Modifier.size(13.dp))
+                        Spacer(modifier = Modifier.width(5.dp))
+                        Text(
+                            text = "${note.checklist.count { it.isChecked }} / ${note.checklist.size} hawlood",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = colors.inkMuted
+                        )
+                    }
                 }
             }
 
@@ -334,6 +364,18 @@ fun NoteCard(
             shape = RoundedCornerShape(16.dp),
             border = androidx.compose.foundation.BorderStroke(1.dp, colors.hairline)
         ) {
+            if (note.isDeleted) {
+                DropdownMenuItem(
+                    text = { Text("Soo celi xasuusta", style = MaterialTheme.typography.bodyMedium) },
+                    leadingIcon = { Icon(Icons.Default.Unarchive, contentDescription = null, tint = colors.accent) },
+                    onClick = { menuOpen = false; onRestore() }
+                )
+                DropdownMenuItem(
+                    text = { Text("Tirtir joogto ah", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error) },
+                    leadingIcon = { Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+                    onClick = { menuOpen = false; onDeleteForever() }
+                )
+            } else {
             DropdownMenuItem(
                 text = { Text("Pin / Ka qaad pin", style = MaterialTheme.typography.bodyMedium) },
                 leadingIcon = {
@@ -405,6 +447,7 @@ fun NoteCard(
                     onDelete()
                 }
             )
+            }
         }
     }
 }

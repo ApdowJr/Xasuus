@@ -30,6 +30,11 @@ service cloud.firestore {
              (!('isPinned' in data) || data.isPinned is bool) &&
              (!('isFavorite' in data) || data.isFavorite is bool) &&
              (!('isArchived' in data) || data.isArchived is bool) &&
+             (!('isDeleted' in data) || data.isDeleted is bool) &&
+             (!('deletedAtMillis' in data) || data.deletedAtMillis == null || data.deletedAtMillis is int) &&
+             (!('reminderAtMillis' in data) || data.reminderAtMillis == null || data.reminderAtMillis is int) &&
+             (!('checklist' in data) || (data.checklist is list && data.checklist.size() <= 100)) &&
+             (!('attachments' in data) || (data.attachments is list && data.attachments.size() <= 30 && (data.attachments.size() == 0 || data.attachments[0] is string))) &&
              (!('color' in data) || (data.color is string && data.color.size() <= 32)) &&
              data.createdAt is timestamp &&
              data.createdAt <= request.time &&
@@ -65,7 +70,7 @@ service cloud.firestore {
                          request.auth.uid == userId &&
                          incoming().userId == request.auth.uid &&
                          incoming().keys().hasAll(['userId', 'title', 'createdAt']) &&
-                         incoming().keys().hasOnly(['userId', 'title', 'content', 'categoryId', 'tags', 'isPinned', 'isFavorite', 'isArchived', 'color', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['userId', 'title', 'content', 'categoryId', 'tags', 'checklist', 'attachments', 'isPinned', 'isFavorite', 'isArchived', 'isDeleted', 'deletedAtMillis', 'reminderAtMillis', 'color', 'createdAt', 'updatedAt']) &&
                          isValidNote(incoming());
 
         allow update: if isSignedIn() &&
@@ -73,7 +78,7 @@ service cloud.firestore {
                          incoming().userId == existing().userId &&
                          incoming().createdAt == existing().createdAt &&
                          isValidNote(incoming()) &&
-                         incoming().diff(existing()).affectedKeys().hasOnly(['title', 'content', 'categoryId', 'tags', 'isPinned', 'isFavorite', 'isArchived', 'color', 'updatedAt']);
+                         incoming().diff(existing()).affectedKeys().hasOnly(['title', 'content', 'categoryId', 'tags', 'checklist', 'attachments', 'isPinned', 'isFavorite', 'isArchived', 'isDeleted', 'deletedAtMillis', 'reminderAtMillis', 'color', 'updatedAt']);
 
         allow delete: if isSignedIn() && request.auth.uid == userId;
       }

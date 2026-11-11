@@ -10,5 +10,6 @@ enum class NotesTab(val label: String) {
     ALL("Dhammaan"),
     PINNED("La xushay"),
     FAVORITES("Jeceshahay"),
-    ARCHIVED("Keydsan")
+    ARCHIVED("Keydsan"),
+    TRASH("Qashin")
 }
