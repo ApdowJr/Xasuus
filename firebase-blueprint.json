@@ -1,0 +1,106 @@
+{
+  "entities": {
+    "Note": {
+      "title": "Note",
+      "description": "User note with title, content, category, tags, and status flags",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Owner user ID"
+        },
+        "title": {
+          "type": "string",
+          "description": "Note title"
+        },
+        "content": {
+          "type": "string",
+          "description": "Note body content"
+        },
+        "categoryId": {
+          "type": "string",
+          "description": "Category ID or name"
+        },
+        "tags": {
+          "type": "array",
+          "description": "List of tags (max 10)"
+        },
+        "isPinned": {
+          "type": "boolean",
+          "description": "Whether note is pinned to top"
+        },
+        "isFavorite": {
+          "type": "boolean",
+          "description": "Whether note is marked as favorite"
+        },
+        "isArchived": {
+          "type": "boolean",
+          "description": "Whether note is archived"
+        },
+        "color": {
+          "type": "string",
+          "description": "Color theme tag for note card"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation timestamp; clients must submit FieldValue.serverTimestamp()"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Update timestamp; clients must submit FieldValue.serverTimestamp()"
+        }
+      },
+      "required": ["userId", "title", "createdAt"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Category for organizing notes",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Owner user ID"
+        },
+        "name": {
+          "type": "string",
+          "description": "Category display name"
+        },
+        "color": {
+          "type": "string",
+          "description": "Color hex or token for category"
+        },
+        "icon": {
+          "type": "string",
+          "description": "Icon identifier"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation timestamp; clients must submit FieldValue.serverTimestamp()"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Update timestamp; clients must submit FieldValue.serverTimestamp()"
+        }
+      },
+      "required": ["userId", "name", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}/notes/{noteId}": {
+      "schema": {
+        "$ref": "#/entities/Note"
+      },
+      "description": "User notes subcollection"
+    },
+    "/users/{userId}/categories/{categoryId}": {
+      "schema": {
+        "$ref": "#/entities/Category"
+      },
+      "description": "User custom categories subcollection"
+    }
+  }
+}

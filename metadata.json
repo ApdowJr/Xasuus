@@ -1,0 +1,6 @@
+{
+  "name": "MyNotes",
+  "description": "Smart Notes - Complete notes app with categories, favorites, archive, and cloud sync.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
