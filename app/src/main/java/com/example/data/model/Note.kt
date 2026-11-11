@@ -17,6 +17,8 @@ data class Note(
     val isFavorite: Boolean = false,
     val isArchived: Boolean = false,
     val color: String = "purple",
+    /** Unix epoch millis for an optional local notification reminder. */
+    val reminderAtMillis: Long? = null,
     @ServerTimestamp val createdAt: Timestamp? = null,
     @ServerTimestamp val updatedAt: Timestamp? = null
 )
