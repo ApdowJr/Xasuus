@@ -1,0 +1,91 @@
+name: Publish Android APK
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Build and publish signed APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.3.1'
+
+      - name: Check release configuration
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          set -euo pipefail
+          for secret in ANDROID_KEYSTORE_BASE64 ANDROID_STORE_PASSWORD ANDROID_KEY_PASSWORD GOOGLE_SERVICES_JSON; do
+            if [[ -z "${!secret}" ]]; then
+              echo "Missing GitHub Actions secret: ${secret}" >&2
+              exit 1
+            fi
+          done
+          if [[ ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Release tags must use vMAJOR.MINOR.PATCH, for example v1.2.3" >&2
+            exit 1
+          fi
+
+      - name: Prepare signing key and Firebase configuration
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/xasuus-release.jks"
+          printf '%s' "$GOOGLE_SERVICES_JSON" > app/google-services.json
+
+      - name: Build signed release APK
+        env:
+          KEYSTORE_PATH: ${{ runner.temp }}/xasuus-release.jks
+          STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          RELEASE_VERSION: ${{ github.ref_name }}
+          RELEASE_CODE: ${{ github.run_number }}
+        run: |
+          set -euo pipefail
+          VERSION_NAME="${RELEASE_VERSION#v}"
+          gradle --no-daemon :app:assembleRelease \
+            -PversionName="$VERSION_NAME" \
+            -PversionCode="$RELEASE_CODE"
+          cp app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/Xasuus.apk"
+          cd "$RUNNER_TEMP"
+          sha256sum Xasuus.apk > Xasuus.apk.sha256
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Xasuus ${{ github.ref_name }}
+          generate_release_notes: true
+          make_latest: true
+          files: |
+            ${{ runner.temp }}/Xasuus.apk
+            ${{ runner.temp }}/Xasuus.apk.sha256
