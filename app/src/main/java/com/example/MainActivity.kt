@@ -9,18 +9,22 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import com.example.security.AppPinStore
 import com.example.ui.auth.AuthScreen
 import com.example.ui.main.MainScreen
+import com.example.ui.security.AppLockScreen
 import com.example.ui.splash.SplashScreen
 import com.example.ui.theme.MyNotesTheme
 import com.google.firebase.Firebase
@@ -34,16 +38,48 @@ enum class AppDestination {
 }
 
 class MainActivity : ComponentActivity() {
+    private var lockOnStop: (() -> Unit)? = null
+
+    override fun onStop() {
+        super.onStop()
+        lockOnStop?.invoke()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            MyNotesTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
-                ) {
-                    AppContent()
+            val preferences = remember { getSharedPreferences("xasuus_preferences", MODE_PRIVATE) }
+            var darkTheme by remember {
+                mutableStateOf(preferences.getBoolean("dark_theme", isSystemInDarkTheme()))
+            }
+            var pinEnabled by remember { mutableStateOf(AppPinStore.isEnabled(this@MainActivity)) }
+            var isAppLocked by remember { mutableStateOf(pinEnabled) }
+            SideEffect {
+                lockOnStop = { if (pinEnabled) isAppLocked = true }
+            }
+            MyNotesTheme(darkTheme = darkTheme) {
+                if (pinEnabled && isAppLocked) {
+                    AppLockScreen(onUnlocked = { isAppLocked = false })
+                } else {
+                    Surface(
+                        modifier = Modifier.fillMaxSize(),
+                        color = MaterialTheme.colorScheme.background
+                    ) {
+                        AppContent(
+                            openCreateNote = intent.getBooleanExtra("create_note_from_widget", false),
+                            pinEnabled = pinEnabled,
+                            onPinChange = { pin ->
+                                AppPinStore.setPin(this@MainActivity, pin)
+                                pinEnabled = !pin.isNullOrBlank()
+                                isAppLocked = pinEnabled
+                            },
+                            onThemeChange = { enabled ->
+                                darkTheme = enabled
+                                preferences.edit().putBoolean("dark_theme", enabled).apply()
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -51,7 +87,12 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun AppContent() {
+fun AppContent(
+    openCreateNote: Boolean = false,
+    pinEnabled: Boolean = false,
+    onPinChange: (String?) -> Unit = {},
+    onThemeChange: (Boolean) -> Unit = {}
+) {
     var currentDestination by remember { mutableStateOf(AppDestination.SPLASH) }
     var currentUser by remember { mutableStateOf(Firebase.auth.currentUser) }
 
@@ -102,7 +143,13 @@ fun AppContent() {
                 val user = currentUser ?: Firebase.auth.currentUser
                 if (user != null) {
                     key(user.uid) {
-                        MainScreen(currentUserId = user.uid)
+                        MainScreen(
+                            currentUserId = user.uid,
+                            openCreateNote = openCreateNote,
+                            pinEnabled = pinEnabled,
+                            onPinChange = onPinChange,
+                            onThemeChange = onThemeChange
+                        )
                     }
                 } else {
                     currentDestination = AppDestination.AUTH

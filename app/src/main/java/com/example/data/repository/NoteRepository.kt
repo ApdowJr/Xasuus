@@ -3,6 +3,7 @@ package com.example.data.repository
 import android.content.Context
 import com.example.R
 import com.example.data.model.Category
+import com.example.data.model.ChecklistEntry
 import com.example.data.model.Note
 import com.example.data.util.OperationType
 import com.example.data.util.handleFirestoreError
@@ -69,7 +70,9 @@ class NoteRepository(
         isPinned: Boolean = false,
         isFavorite: Boolean = false,
         isArchived: Boolean = false,
-        reminderAtMillis: Long? = null
+        reminderAtMillis: Long? = null,
+        checklist: List<ChecklistEntry> = emptyList(),
+        attachments: List<String> = emptyList()
     ): Result<String> {
         val uid = requireUserId()
         val docRef = db.collection("users").document(uid).collection("notes").document()
@@ -79,6 +82,8 @@ class NoteRepository(
             "content" to content.trim(),
             "categoryId" to categoryId.ifBlank { "general" },
             "tags" to tags.take(10),
+            "checklist" to checklist.map { mapOf("id" to it.id, "text" to it.text, "isChecked" to it.isChecked) },
+            "attachments" to attachments,
             "isPinned" to isPinned,
             "isFavorite" to isFavorite,
             "isArchived" to isArchived,
@@ -108,7 +113,9 @@ class NoteRepository(
         isPinned: Boolean,
         isFavorite: Boolean,
         isArchived: Boolean,
-        reminderAtMillis: Long? = null
+        reminderAtMillis: Long? = null,
+        checklist: List<ChecklistEntry> = emptyList(),
+        attachments: List<String> = emptyList()
     ): Result<Unit> {
         val uid = requireUserId()
         require(id.isNotBlank()) { "Note ID cannot be blank for update" }
@@ -118,6 +125,8 @@ class NoteRepository(
             "content" to content.trim(),
             "categoryId" to categoryId.ifBlank { "general" },
             "tags" to tags.take(10),
+            "checklist" to checklist.map { mapOf("id" to it.id, "text" to it.text, "isChecked" to it.isChecked) },
+            "attachments" to attachments,
             "isPinned" to isPinned,
             "isFavorite" to isFavorite,
             "isArchived" to isArchived,
@@ -192,6 +201,35 @@ class NoteRepository(
             Result.failure(e)
         }
     }
+
+    /** Move a note into the user's recoverable trash instead of deleting it immediately. */
+    suspend fun moveNoteToTrash(noteId: String): Result<Unit> = updateTrashState(noteId, deleted = true)
+
+    /** Restore a note from trash. */
+    suspend fun restoreNote(noteId: String): Result<Unit> = updateTrashState(noteId, deleted = false)
+
+    private suspend fun updateTrashState(noteId: String, deleted: Boolean): Result<Unit> {
+        val uid = requireUserId()
+        require(noteId.isNotBlank()) { "Note ID cannot be blank" }
+        val docRef = db.collection("users").document(uid).collection("notes").document(noteId)
+        return try {
+            docRef.update(
+                mapOf(
+                    "isDeleted" to deleted,
+                    "deletedAtMillis" to if (deleted) System.currentTimeMillis() else null,
+                    "updatedAt" to FieldValue.serverTimestamp()
+                )
+            ).await()
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.UPDATE, docRef.path)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun permanentlyDeleteNote(noteId: String): Result<Unit> = deleteNote(noteId)
 
     suspend fun deleteNote(noteId: String): Result<Unit> {
         val uid = requireUserId()

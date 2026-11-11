@@ -1,6 +1,10 @@
 package com.example.ui.main
 
 import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
@@ -29,6 +33,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
@@ -43,6 +48,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.GridView
@@ -88,7 +94,9 @@ import androidx.credentials.CredentialManager
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.data.model.Category
+import com.example.data.model.ChecklistEntry
 import com.example.data.model.Note
+import com.example.data.util.PdfNoteExporter
 import com.example.data.repository.NoteRepository
 import com.example.ui.auth.performSignOut
 import com.example.ui.categories.CategoriesDialog
@@ -113,14 +121,27 @@ import com.example.ui.theme.XasuusTheme
 import com.example.ui.viewmodel.NoteViewModel
 import com.google.firebase.Firebase
 import com.google.firebase.auth.auth
+import com.google.firebase.storage.storage
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 
 /** Bottom navigation destinations. Notes is the home surface, categories the library. */
 private enum class HomeNav { NOTES, CATEGORIES }
 
+private data class PdfExportRequest(
+    val title: String,
+    val content: String,
+    val tags: List<String>,
+    val checklist: List<ChecklistEntry>
+)
+
 @Composable
 fun MainScreen(
-    currentUserId: String
+    currentUserId: String,
+    openCreateNote: Boolean = false,
+    pinEnabled: Boolean = false,
+    onPinChange: (String?) -> Unit = {},
+    onThemeChange: (Boolean) -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -140,6 +161,37 @@ fun MainScreen(
     val operationMessage by viewModel.operationMessage.collectAsStateWithLifecycle()
 
     val snackbarHostState = remember { SnackbarHostState() }
+    var pendingPdfExport by remember { mutableStateOf<PdfExportRequest?>(null) }
+    val pdfExportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/pdf")
+    ) { destination ->
+        val request = pendingPdfExport
+        pendingPdfExport = null
+        if (destination != null && request != null) {
+            runCatching {
+                PdfNoteExporter.write(
+                    context = context,
+                    uri = destination,
+                    title = request.title,
+                    content = buildString {
+                        append(request.content)
+                        if (request.checklist.isNotEmpty()) {
+                            appendLine()
+                            appendLine()
+                            request.checklist.forEach { item ->
+                                appendLine("${if (item.isChecked) "[x]" else "[ ]"} ${item.text}")
+                            }
+                        }
+                    },
+                    tags = request.tags
+                )
+            }.onSuccess {
+                Toast.makeText(context, "PDF waa la kaydiyay", Toast.LENGTH_SHORT).show()
+            }.onFailure {
+                Toast.makeText(context, "PDF lama dhoofin karin: ${it.localizedMessage}", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
 
     var isSearchExpanded by remember { mutableStateOf(false) }
     var isGridLayout by remember { mutableStateOf(true) }
@@ -147,7 +199,7 @@ fun MainScreen(
 
     // Dialog & screen navigation state
     var editingNote by remember { mutableStateOf<Note?>(null) }
-    var isCreatingNewNote by remember { mutableStateOf(false) }
+    var isCreatingNewNote by remember { mutableStateOf(openCreateNote) }
     var showCategoriesDialog by remember { mutableStateOf(false) }
     var showSettingsDialog by remember { mutableStateOf(false) }
 
@@ -171,10 +223,14 @@ fun MainScreen(
                 isCreatingNewNote = false
                 editingNote = null
             },
-            onShare = { title, content, tags ->
+            onShare = { title, content, tags, checklist ->
                 val shareText = buildString {
                     appendLine(title.ifBlank { "Xasuus" })
                     if (content.isNotBlank()) appendLine("\n$content")
+                    if (checklist.isNotEmpty()) {
+                        appendLine("\nHawlaha:")
+                        checklist.forEach { appendLine("${if (it.isChecked) "[x]" else "[ ]"} ${it.text}") }
+                    }
                     if (tags.isNotEmpty()) appendLine("\n" + tags.joinToString(" ") { "#$it" })
                 }
                 val sendIntent = Intent(Intent.ACTION_SEND).apply {
@@ -184,7 +240,46 @@ fun MainScreen(
                 }
                 context.startActivity(Intent.createChooser(sendIntent, "La wadaag xasuusta"))
             },
-            onSave = { title, content, catId, tags, color, isPinned, isFavorite, isArchived, reminderAtMillis ->
+            onExportPdf = { title, content, tags, checklist ->
+                pendingPdfExport = PdfExportRequest(title, content, tags, checklist)
+                val filename = (title.ifBlank { "Xasuus" }.replace(Regex("[^A-Za-z0-9 _-]"), "").trim().ifBlank { "Xasuus" }) + ".pdf"
+                pdfExportLauncher.launch(filename)
+            },
+            onSave = { title, content, catId, tags, color, isPinned, isFavorite, isArchived, reminderAtMillis, checklist, attachments, newAttachmentUris ->
+                fun finishEditor(noteId: String) {
+                    ReminderNotifications.schedule(context, noteId, title, reminderAtMillis)
+                    isCreatingNewNote = false
+                    editingNote = null
+                }
+                fun uploadAndFinish(noteId: String) {
+                    if (newAttachmentUris.isEmpty()) {
+                        finishEditor(noteId)
+                        return
+                    }
+                    scope.launch {
+                        try {
+                            val uploaded = uploadNoteAttachments(currentUserId, noteId, newAttachmentUris)
+                            viewModel.updateNote(
+                                id = noteId,
+                                title = title,
+                                content = content,
+                                categoryId = catId,
+                                tags = tags,
+                                color = color,
+                                isPinned = isPinned,
+                                isFavorite = isFavorite,
+                                isArchived = isArchived,
+                                reminderAtMillis = reminderAtMillis,
+                                checklist = checklist,
+                                attachments = attachments + uploaded,
+                                onSuccess = { finishEditor(noteId) }
+                            )
+                        } catch (error: Exception) {
+                            snackbarHostState.showSnackbar("Lifaaqa lama upload-gareyn: ${error.localizedMessage ?: "isku day mar kale"}")
+                            finishEditor(noteId)
+                        }
+                    }
+                }
                 if (targetNote == null) {
                     viewModel.createNote(
                         title = title,
@@ -195,10 +290,9 @@ fun MainScreen(
                         isPinned = isPinned,
                         isFavorite = isFavorite,
                         reminderAtMillis = reminderAtMillis,
-                        onSuccess = { newId ->
-                            ReminderNotifications.schedule(context, newId, title, reminderAtMillis)
-                            isCreatingNewNote = false
-                        }
+                        checklist = checklist,
+                        attachments = attachments,
+                        onSuccess = { newId -> uploadAndFinish(newId) }
                     )
                 } else {
                     viewModel.updateNote(
@@ -211,11 +305,11 @@ fun MainScreen(
                         isPinned = isPinned,
                         isFavorite = isFavorite,
                         isArchived = isArchived,
-                        reminderAtMillis = reminderAtMillis
-                    ) {
-                        ReminderNotifications.schedule(context, targetNote.id, title, reminderAtMillis)
-                        editingNote = null
-                    }
+                        reminderAtMillis = reminderAtMillis,
+                        checklist = checklist,
+                        attachments = attachments,
+                        onSuccess = { uploadAndFinish(targetNote.id) }
+                    )
                 }
             },
             onDelete = if (targetNote != null) {
@@ -291,6 +385,16 @@ fun MainScreen(
                                 viewModel.deleteNote(noteId) {
                                     ReminderNotifications.cancel(context, noteId)
                                 }
+                            },
+                            onRestoreNote = { noteId ->
+                                viewModel.restoreNote(noteId)
+                                rawNotes.firstOrNull { it.id == noteId }?.let {
+                                    ReminderNotifications.schedule(context, noteId, it.title, it.reminderAtMillis)
+                                }
+                            },
+                            onPermanentlyDeleteNote = { noteId ->
+                                viewModel.permanentlyDeleteNote(noteId)
+                                ReminderNotifications.cancel(context, noteId)
                             }
                         )
 
@@ -339,6 +443,10 @@ fun MainScreen(
     if (showSettingsDialog) {
         SettingsDialog(
             notes = rawNotes,
+            isDarkTheme = XasuusTheme.colors.isDark,
+            onThemeChange = onThemeChange,
+            pinEnabled = pinEnabled,
+            onPinChange = onPinChange,
             onDismiss = { showSettingsDialog = false },
             onSignOut = {
                 performSignOut(credentialManager, scope)
@@ -373,11 +481,13 @@ private fun NotesHome(
     onTogglePin: (Note) -> Unit,
     onToggleFavorite: (Note) -> Unit,
     onToggleArchive: (Note) -> Unit,
-    onDeleteNote: (String) -> Unit
+    onDeleteNote: (String) -> Unit,
+    onRestoreNote: (String) -> Unit,
+    onPermanentlyDeleteNote: (String) -> Unit
 ) {
     val colors = XasuusTheme.colors
-    val totalNotes = (notesState as? UiState.Success)?.data?.count { !it.isArchived } ?: 0
-    val pinnedCount = (notesState as? UiState.Success)?.data?.count { it.isPinned && !it.isArchived } ?: 0
+    val totalNotes = (notesState as? UiState.Success)?.data?.count { !it.isArchived && !it.isDeleted } ?: 0
+    val pinnedCount = (notesState as? UiState.Success)?.data?.count { it.isPinned && !it.isArchived && !it.isDeleted } ?: 0
 
     Column(modifier = Modifier.fillMaxSize()) {
         // ------------------------------------------------------------------ header
@@ -583,17 +693,17 @@ private fun NotesHome(
                                     SectionHeader("La xushay", pinned.size, AccentAmber, Icons.Default.PushPin)
                                 }
                                 items(pinned, key = { "p_${it.id}" }) { note ->
-                                    NoteTile(note, onEditNote, onTogglePin, onToggleFavorite, onToggleArchive, onDeleteNote)
+                                    NoteTile(note, onEditNote, onTogglePin, onToggleFavorite, onToggleArchive, onDeleteNote, onRestoreNote, onPermanentlyDeleteNote)
                                 }
                                 item(span = StaggeredGridItemSpan.FullLine, key = "others_header") {
                                     SectionHeader("Xasuusaha kale", others.size, colors.inkFaint, null)
                                 }
                                 items(others, key = { "o_${it.id}" }) { note ->
-                                    NoteTile(note, onEditNote, onTogglePin, onToggleFavorite, onToggleArchive, onDeleteNote)
+                                    NoteTile(note, onEditNote, onTogglePin, onToggleFavorite, onToggleArchive, onDeleteNote, onRestoreNote, onPermanentlyDeleteNote)
                                 }
                             } else {
                                 items(filteredNotes, key = { it.id }) { note ->
-                                    NoteTile(note, onEditNote, onTogglePin, onToggleFavorite, onToggleArchive, onDeleteNote)
+                                    NoteTile(note, onEditNote, onTogglePin, onToggleFavorite, onToggleArchive, onDeleteNote, onRestoreNote, onPermanentlyDeleteNote)
                                 }
                             }
                         }
@@ -608,17 +718,17 @@ private fun NotesHome(
                                     SectionHeader("La xushay", pinned.size, AccentAmber, Icons.Default.PushPin)
                                 }
                                 items(pinned, key = { "p_${it.id}" }) { note ->
-                                    NoteTile(note, onEditNote, onTogglePin, onToggleFavorite, onToggleArchive, onDeleteNote)
+                                    NoteTile(note, onEditNote, onTogglePin, onToggleFavorite, onToggleArchive, onDeleteNote, onRestoreNote, onPermanentlyDeleteNote)
                                 }
                                 item(key = "others_header") {
                                     SectionHeader("Xasuusaha kale", others.size, colors.inkFaint, null)
                                 }
                                 items(others, key = { "o_${it.id}" }) { note ->
-                                    NoteTile(note, onEditNote, onTogglePin, onToggleFavorite, onToggleArchive, onDeleteNote)
+                                    NoteTile(note, onEditNote, onTogglePin, onToggleFavorite, onToggleArchive, onDeleteNote, onRestoreNote, onPermanentlyDeleteNote)
                                 }
                             } else {
                                 items(filteredNotes, key = { it.id }) { note ->
-                                    NoteTile(note, onEditNote, onTogglePin, onToggleFavorite, onToggleArchive, onDeleteNote)
+                                    NoteTile(note, onEditNote, onTogglePin, onToggleFavorite, onToggleArchive, onDeleteNote, onRestoreNote, onPermanentlyDeleteNote)
                                 }
                             }
                         }
@@ -636,7 +746,9 @@ private fun NoteTile(
     onTogglePin: (Note) -> Unit,
     onToggleFavorite: (Note) -> Unit,
     onToggleArchive: (Note) -> Unit,
-    onDeleteNote: (String) -> Unit
+    onDeleteNote: (String) -> Unit,
+    onRestoreNote: (String) -> Unit,
+    onPermanentlyDeleteNote: (String) -> Unit
 ) {
     NoteCard(
         note = note,
@@ -644,7 +756,9 @@ private fun NoteTile(
         onTogglePin = { onTogglePin(note) },
         onToggleFavorite = { onToggleFavorite(note) },
         onToggleArchive = { onToggleArchive(note) },
-        onDelete = { onDeleteNote(note.id) }
+        onDelete = { onDeleteNote(note.id) },
+        onRestore = { onRestoreNote(note.id) },
+        onDeleteForever = { onPermanentlyDeleteNote(note.id) }
     )
 }
 
@@ -727,6 +841,7 @@ private fun SegmentedTabs(
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
             .background(colors.recessed)
+            .horizontalScroll(rememberScrollState())
             .padding(4.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
@@ -734,17 +849,18 @@ private fun SegmentedTabs(
             NotesTab.ALL to "Dhammaan",
             NotesTab.PINNED to "La xushay",
             NotesTab.FAVORITES to "Jeceshahay",
-            NotesTab.ARCHIVED to "Keydsan"
+            NotesTab.ARCHIVED to "Keydsan",
+            NotesTab.TRASH to "Qashin"
         )
         NotesTab.values().forEach { tab ->
             val selected = tab == activeTab
             Box(
                 modifier = Modifier
-                    .weight(1f)
+                    .widthIn(min = 66.dp)
                     .clip(RoundedCornerShape(12.dp))
                     .background(if (selected) colors.card else Color.Transparent)
                     .clickableCompat { onSelectTab(tab) }
-                    .padding(vertical = 9.dp),
+                    .padding(horizontal = 10.dp, vertical = 9.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
@@ -844,6 +960,11 @@ private fun EmptyState(
             Icons.Default.Archive,
             "Keydkaagu waa madhan yahay",
             "Xasuusaha aadan hadda u baahnayn geli keydka si ay u nadiif noqoto."
+        )
+        activeTab == NotesTab.TRASH -> Triple(
+            Icons.Default.DeleteOutline,
+            "Qashinku waa madhan yahay",
+            "Xasuusaha aad tirtirto muddo ayay halkan ku sii jiri doonaan si aad u soo ceshato."
         )
         else -> Triple(
             Icons.Default.NoteAdd,
@@ -1198,4 +1319,17 @@ private fun greeting(): String {
         in 17..21 -> "Galab wanaagsan"
         else -> "Habeen wanaagsan"
     }
+}
+
+private suspend fun uploadNoteAttachments(
+    userId: String,
+    noteId: String,
+    sources: List<String>
+): List<String> = sources.map { source ->
+    val uri = Uri.parse(source)
+    val objectName = java.util.UUID.randomUUID().toString()
+    val reference = Firebase.storage.reference
+        .child("users/$userId/notes/$noteId/attachments/$objectName")
+    reference.putFile(uri).await()
+    reference.downloadUrl.await().toString()
 }

@@ -26,9 +26,11 @@ import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.outlined.CloudDone
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.Switch
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -43,6 +45,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -64,17 +69,25 @@ import com.google.firebase.auth.auth
 @Composable
 fun SettingsDialog(
     notes: List<Note>,
+    isDarkTheme: Boolean,
+    onThemeChange: (Boolean) -> Unit,
+    pinEnabled: Boolean,
+    onPinChange: (String?) -> Unit,
     onDismiss: () -> Unit,
     onSignOut: () -> Unit
 ) {
     val colors = XasuusTheme.colors
     val user = Firebase.auth.currentUser
     var showSignOutConfirm by remember { mutableStateOf(false) }
+    var showPinDialog by remember { mutableStateOf(false) }
+    var newPin by remember { mutableStateOf("") }
+    var confirmPin by remember { mutableStateOf("") }
+    var pinError by remember { mutableStateOf<String?>(null) }
 
-    val totalNotes = notes.count { !it.isArchived }
-    val pinnedCount = notes.count { it.isPinned && !it.isArchived }
-    val favoritesCount = notes.count { it.isFavorite && !it.isArchived }
-    val archivedCount = notes.count { it.isArchived }
+    val totalNotes = notes.count { !it.isArchived && !it.isDeleted }
+    val pinnedCount = notes.count { it.isPinned && !it.isArchived && !it.isDeleted }
+    val favoritesCount = notes.count { it.isFavorite && !it.isArchived && !it.isDeleted }
+    val archivedCount = notes.count { it.isArchived && !it.isDeleted }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -260,6 +273,57 @@ fun SettingsDialog(
 
                 Spacer(modifier = Modifier.height(22.dp))
 
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(colors.canvas)
+                        .border(1.dp, colors.hairline, RoundedCornerShape(16.dp))
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Qufulka PIN-ka", style = MaterialTheme.typography.labelLarge, color = colors.ink)
+                        Text(
+                            if (pinEnabled) "App-ka wuu xirmayaa markaad ka baxdo" else "PIN 4 ilaa 8 lambar ah",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = colors.inkMuted
+                        )
+                    }
+                    TextButton(onClick = { showPinDialog = true; newPin = ""; confirmPin = ""; pinError = null }) {
+                        Text(if (pinEnabled) "Beddel" else "Deji", color = colors.accent)
+                    }
+                }
+                if (pinEnabled) {
+                    TextButton(onClick = { onPinChange(null) }, modifier = Modifier.align(Alignment.End)) {
+                        Text("Dami qufulka PIN", color = MaterialTheme.colorScheme.error)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(colors.canvas)
+                        .border(1.dp, colors.hairline, RoundedCornerShape(16.dp))
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Muuqaalka mugdiga ah", style = MaterialTheme.typography.labelLarge, color = colors.ink)
+                        Text(
+                            "Doorashadaada way xasuusanaysaa",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = colors.inkMuted
+                        )
+                    }
+                    Switch(checked = isDarkTheme, onCheckedChange = onThemeChange)
+                }
+
+                Spacer(modifier = Modifier.height(22.dp))
+
                 Eyebrow(text = "Ku saabsan")
                 Spacer(modifier = Modifier.height(10.dp))
                 Column(
@@ -327,6 +391,62 @@ fun SettingsDialog(
                 TextButton(onClick = { showSignOutConfirm = false }) {
                     Text("Jooji", color = XasuusTheme.colors.inkMuted)
                 }
+            }
+        )
+    }
+
+    if (showPinDialog) {
+        AlertDialog(
+            onDismissRequest = { showPinDialog = false },
+            shape = RoundedCornerShape(24.dp),
+            containerColor = colors.card,
+            title = { Text("Deji PIN-ka Xasuus", color = colors.ink) },
+            text = {
+                Column {
+                    Text("Dooro PIN u dhexeeya 4 iyo 8 lambar. Waxaa loo baahan yahay markaad app-ka dib ugu soo laabato.", color = colors.inkMuted)
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = newPin,
+                        onValueChange = { newPin = it.filter(Char::isDigit).take(8); pinError = null },
+                        label = { Text("PIN cusub") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = confirmPin,
+                        onValueChange = { confirmPin = it.filter(Char::isDigit).take(8); pinError = null },
+                        label = { Text("Xaqiiji PIN-ka") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    if (pinError != null) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(pinError.orEmpty(), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            },
+            confirmButton = {
+                ActionButton(
+                    text = "Kaydi PIN-ka",
+                    height = 44.dp,
+                    onClick = {
+                        when {
+                            newPin.length < 4 -> pinError = "PIN-ku ha ahaado ugu yaraan 4 lambar."
+                            newPin != confirmPin -> pinError = "PIN-yadu isma waafaqaan."
+                            else -> { onPinChange(newPin); showPinDialog = false }
+                        }
+                    },
+                    container = colors.inkPill,
+                    contentColor = colors.onInkPill
+                )
+            },
+            dismissButton = {
+                TextButton(onClick = { showPinDialog = false }) { Text("Ka noqo", color = colors.inkMuted) }
             }
         )
     }
