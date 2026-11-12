@@ -29,7 +29,7 @@ Before the first tag, add these repository **Actions secrets** under **Settings 
 - `ANDROID_KEYSTORE_BASE64` — base64 encoding of the persistent release keystore.
 - `ANDROID_STORE_PASSWORD` — that keystore's password.
 - `ANDROID_KEY_PASSWORD` — password for the `upload` key.
-- `GOOGLE_SERVICES_JSON` — the Firebase Android `google-services.json` file contents for this app.
+The Firebase Android configuration is included at `app/google-services.json`; it is client configuration, not a service-account credential. Protect your Firebase data with the deployed Firestore and Storage rules and Firebase Console restrictions. Never commit a service-account key.
 
 Create the release key once and keep its keystore and passwords backed up securely. Do not commit the keystore or passwords. The app Gradle configuration uses the alias `upload`:
 
@@ -45,4 +45,10 @@ base64 -w 0 xasuus-release.jks
 base64 < xasuus-release.jks | tr -d '\n'
 ```
 
-If the signing key is lost or replaced, Android will reject in-place updates signed by the new key. Configure and enable the Firebase project and Storage before publishing, and deploy the repository's `firestore.rules` and `storage.rules` as appropriate.
+If the signing key is lost or replaced, Android will reject in-place updates signed by the new key. The checked-in `.firebaserc` selects the project configured in `app/google-services.json`. In Firebase Console, enable Email/Password sign-in, create/verify the configured Firestore database and Storage bucket, then deploy the repository's security rules with Firebase CLI:
+
+```bash
+firebase deploy --only firestore:rules,storage
+```
+
+Firebase Console setup and rule deployment require access to the Firebase project; this repository configuration does not itself turn on billing, Authentication providers, Firestore, or Storage.
