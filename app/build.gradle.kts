@@ -17,8 +17,10 @@ android {
     applicationId = "com.aistudio.mynotes.xasuus"
     minSdk = 24
     targetSdk = 36
-    versionCode = 1
-    versionName = "1.0"
+    // Release workflow supplies monotonically increasing versionCode and the semantic version
+    // parsed from the vX.Y.Z Git tag. Local builds retain these safe defaults.
+    versionCode = providers.gradleProperty("versionCode").orElse("1").get().toInt()
+    versionName = providers.gradleProperty("versionName").orElse("1.0").get()
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
