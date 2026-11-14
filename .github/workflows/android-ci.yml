@@ -19,13 +19,17 @@ jobs:
       - name: Compile and run standalone tests
         run: |
           set -o pipefail
-          if ! ./gradlew --no-daemon :app:assembleDebug :app:testDebugUnitTest --tests 'com.example.security.AppPinStoreTest' --tests 'com.example.notifications.ReminderNotificationsTest' --tests 'com.example.ExampleRobolectricTest' 2>&1 | tee android-build.log; then
-            while IFS= read -r line; do
+          set +e
+          ./gradlew --no-daemon :app:assembleDebug :app:testDebugUnitTest --tests 'com.example.security.AppPinStoreTest' --tests 'com.example.notifications.ReminderNotificationsTest' --tests 'com.example.ExampleRobolectricTest' 2>&1 | tee android-build.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            echo "::error::Gradle exited with status $status"
+            tail -n 80 android-build.log | tac | head -n 8 | while IFS= read -r line; do
               line=${line//'%'/'%25'}
               line=${line//$'\r'/'%0D'}
               echo "::error::$line"
-            done < <(tail -n 40 android-build.log)
-            exit 1
+            done
+            exit "$status"
           fi
   firestore-rules:
     runs-on: ubuntu-latest
