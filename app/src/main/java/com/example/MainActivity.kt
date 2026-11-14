@@ -50,8 +50,9 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             val preferences = remember { getSharedPreferences("xasuus_preferences", MODE_PRIVATE) }
+            val systemDarkTheme = isSystemInDarkTheme()
             var darkTheme by remember {
-                mutableStateOf(preferences.getBoolean("dark_theme", isSystemInDarkTheme()))
+                mutableStateOf(preferences.getBoolean("dark_theme", systemDarkTheme))
             }
             var pinEnabled by remember { mutableStateOf(AppPinStore.isEnabled(this@MainActivity)) }
             var isAppLocked by remember { mutableStateOf(pinEnabled) }
