@@ -64,6 +64,7 @@ import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.ViewAgenda
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -111,7 +112,7 @@ import com.example.ui.components.categoryLabel
 import com.example.ui.components.clickableCompat
 import com.example.ui.components.toneFor
 import com.example.ui.notes.NoteEditorScreen
-import com.example.ui.notifications.ReminderNotifications
+import com.example.notifications.ReminderNotifications
 import com.example.ui.settings.SettingsDialog
 import com.example.ui.state.NotesTab
 import com.example.ui.state.UiState
