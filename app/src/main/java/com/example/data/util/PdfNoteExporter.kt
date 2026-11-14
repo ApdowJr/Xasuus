@@ -76,12 +76,6 @@ object PdfNoteExporter {
                 document.finishPage(page)
                 pageNumber++
             } while (lineIndex < lines.size)
-            if (lines.isEmpty()) {
-                val page = document.startPage(PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create())
-                page.canvas.drawColor(android.graphics.Color.WHITE)
-                page.canvas.drawText(title.ifBlank { "Xasuus" }, margin, margin + 12f, titlePaint)
-                document.finishPage(page)
-            }
             document.writeTo(output)
         } finally {
             output.close()

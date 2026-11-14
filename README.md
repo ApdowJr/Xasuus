@@ -52,3 +52,30 @@ firebase deploy --only firestore:rules,storage
 ```
 
 Firebase Console setup and rule deployment require access to the Firebase project; this repository configuration does not itself turn on billing, Authentication providers, Firestore, or Storage.
+
+## Local build and tests
+
+Install JDK 17 and the Android SDK (including the SDK required by `app/build.gradle.kts`). Set `ANDROID_HOME` or `sdk.dir` in `local.properties`. The repository contains the Gradle wrapper; its first run downloads Gradle 9.3.1. The debug signing configuration expects `debug.keystore` in the repository root. Create a local debug-only key if it does not exist:
+
+```bash
+keytool -genkeypair -keystore debug.keystore -storepass android -keypass android \
+  -alias androiddebugkey -dname 'CN=Android Debug,O=Android,C=US' -keyalg RSA -validity 10000
+./gradlew :app:assembleDebug
+./gradlew :app:testDebugUnitTest --tests 'com.example.security.AppPinStoreTest' \
+  --tests 'com.example.notifications.ReminderNotificationsTest' --tests 'com.example.ExampleRobolectricTest'
+```
+
+Never use the debug key for releases. The repository tests under `data/repository` also require running Firestore and Auth emulators; they are not included in the standalone test command above. To run the separate Firestore security-rule tests, install Node.js 20 and Java, then run `npm ci` and `npm run test:rules`. This uses the local emulators and the demo project, not production data. Android CI runs both the standalone Android tests and the Firestore rules tests; device/instrumentation testing and Storage rules tests are not yet automated.
+
+## Backup and recovery
+
+Android cloud backup and device transfer intentionally exclude local app data, including cached notes, authentication state, PIN hashes, and locally scheduled reminders. Sign in on the new device to retrieve notes that were successfully synced to Firebase; **unsynced changes are not recovered**. Set the app PIN again and verify or recreate reminders on the new device. This policy does not replace Firebase backups or protect against deletion in Firebase.
+
+## Firebase deployment checklist
+
+1. In Firebase Console, select the project in `.firebaserc`; enable Email/Password Authentication, and create or verify the named Firestore database in `firebase.json` and the configured Storage bucket.
+2. From an authenticated Firebase CLI with permission to deploy to that project, review `firestore.rules` and `storage.rules`, then run `firebase deploy --only firestore:rules,storage`.
+3. Test sign-up, sign-in, syncing, attachments, and access isolation with two test accounts. Do not use production data for emulator tests. Check the project's App Check settings before enforcing them.
+4. Configure the three release signing secrets described above, then push a new version tag to publish. Never replace an existing production signing key; back it up securely.
+
+Console configuration, rule deployment, and release secrets require project-owner access and are not performed automatically by checking in this repository.
