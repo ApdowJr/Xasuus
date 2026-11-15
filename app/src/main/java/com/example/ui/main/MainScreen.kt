@@ -141,6 +141,9 @@ fun MainScreen(
     currentUserId: String,
     openCreateNote: Boolean = false,
     openNoteId: String? = null,
+    openNoteRequestId: Int = 0,
+    onOpenNoteHandled: (String) -> Unit = {},
+    onCreateNoteHandled: () -> Unit = {},
     pinEnabled: Boolean = false,
     onPinChange: (String?) -> Unit = {},
     onThemeChange: (Boolean) -> Unit = {}
@@ -215,14 +218,28 @@ fun MainScreen(
         }
     }
 
-    // A reminder notification carries the note id. Wait until the synced note list contains it,
-    // then open that note once; closing the editor must not reopen it on the next sync.
-    var pendingOpenNoteId by remember(openNoteId) { mutableStateOf(openNoteId) }
+    // A widget tap can arrive while the activity is already running: react to the flag change
+    // instead of only reading the value once at first composition.
+    LaunchedEffect(openCreateNote) {
+        if (openCreateNote) {
+            isCreatingNewNote = true
+            onCreateNoteHandled()
+        }
+    }
+
+    // A reminder notification carries the note id plus a monotonically increasing request id,
+    // so tapping the same note twice opens it twice. Wait until the synced note list contains
+    // the id, then open it once and report it handled.
+    var pendingOpenNoteId by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(openNoteId, openNoteRequestId) {
+        if (openNoteId != null) pendingOpenNoteId = openNoteId
+    }
     LaunchedEffect(pendingOpenNoteId, rawNotes) {
         val requestedId = pendingOpenNoteId ?: return@LaunchedEffect
         rawNotes.firstOrNull { it.id == requestedId }?.let { note ->
             editingNote = note
             pendingOpenNoteId = null
+            onOpenNoteHandled(requestedId)
         }
     }
 

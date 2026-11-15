@@ -1,6 +1,7 @@
 package com.example
 
 import android.os.Bundle
+import android.content.Intent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -39,15 +40,37 @@ enum class AppDestination {
 
 class MainActivity : ComponentActivity() {
     private var lockOnStop: (() -> Unit)? = null
+    private var openNoteId by mutableStateOf<String?>(null)
+    private var createNoteFromWidget by mutableStateOf(false)
+    private var openDeepLinkRequestId by mutableStateOf(0)
 
     override fun onStop() {
         super.onStop()
         lockOnStop?.invoke()
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        consumeDeepLinks(intent)
+    }
+
+    private fun consumeDeepLinks(intent: Intent?) {
+        intent?.getStringExtra("open_note_id")?.takeIf { it.isNotBlank() }?.let { id ->
+            openNoteId = id
+            openDeepLinkRequestId += 1
+            intent.removeExtra("open_note_id")
+        }
+        if (intent?.getBooleanExtra("create_note_from_widget", false) == true) {
+            createNoteFromWidget = true
+            intent.removeExtra("create_note_from_widget")
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        consumeDeepLinks(intent)
         setContent {
             val preferences = remember { getSharedPreferences("xasuus_preferences", MODE_PRIVATE) }
             val systemDarkTheme = isSystemInDarkTheme()
@@ -68,8 +91,13 @@ class MainActivity : ComponentActivity() {
                         color = MaterialTheme.colorScheme.background
                     ) {
                         AppContent(
-                            openCreateNote = intent.getBooleanExtra("create_note_from_widget", false),
-                            openNoteId = intent.getStringExtra("open_note_id"),
+                            openCreateNote = createNoteFromWidget,
+                            openNoteId = openNoteId,
+                            openNoteRequestId = openDeepLinkRequestId,
+                            onOpenNoteHandled = { handledId ->
+                                if (openNoteId == handledId) openNoteId = null
+                            },
+                            onCreateNoteHandled = { createNoteFromWidget = false },
                             pinEnabled = pinEnabled,
                             onPinChange = { pin ->
                                 AppPinStore.setPin(this@MainActivity, pin)
@@ -92,6 +120,9 @@ class MainActivity : ComponentActivity() {
 fun AppContent(
     openCreateNote: Boolean = false,
     openNoteId: String? = null,
+    openNoteRequestId: Int = 0,
+    onOpenNoteHandled: (String) -> Unit = {},
+    onCreateNoteHandled: () -> Unit = {},
     pinEnabled: Boolean = false,
     onPinChange: (String?) -> Unit = {},
     onThemeChange: (Boolean) -> Unit = {}
@@ -150,6 +181,9 @@ fun AppContent(
                             currentUserId = user.uid,
                             openCreateNote = openCreateNote,
                             openNoteId = openNoteId,
+                            openNoteRequestId = openNoteRequestId,
+                            onOpenNoteHandled = onOpenNoteHandled,
+                            onCreateNoteHandled = onCreateNoteHandled,
                             pinEnabled = pinEnabled,
                             onPinChange = onPinChange,
                             onThemeChange = onThemeChange

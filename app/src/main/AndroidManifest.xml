@@ -29,12 +29,13 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/xasuus_widget_info" />
         </receiver>
+        <!-- BOOT_COMPLETED is a system broadcast: from Android 12 the receiver must be exported, and the permission keeps any other app from sending it. Reminder alarms use explicit PendingIntents, so they do not need an intent filter. -->
         <receiver
             android:name=".notifications.ReminderBroadcastReceiver"
             android:enabled="true"
-            android:exported="false">
+            android:exported="true"
+            android:permission="android.permission.RECEIVE_BOOT_COMPLETED">
             <intent-filter>
-                <action android:name="com.example.action.FIRE_NOTE_REMINDER" />
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
             </intent-filter>
         </receiver>
