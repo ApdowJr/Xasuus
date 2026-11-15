@@ -19,18 +19,35 @@ jobs:
       - name: Compile and run standalone tests
         run: |
           set -o pipefail
-          set +e
-          ./gradlew --no-daemon :app:assembleDebug :app:testDebugUnitTest --tests 'com.example.security.AppPinStoreTest' --tests 'com.example.notifications.ReminderNotificationsTest' --tests 'com.example.ExampleRobolectricTest' 2>&1 | tee android-build.log
-          status=${PIPESTATUS[0]}
-          if [ "$status" -ne 0 ]; then
-            echo "::error::Gradle exited with status $status"
-            summary=$(tail -n 100 android-build.log)
-            summary=${summary//'%'/'%25'}
-            summary=${summary//$'\r'/'%0D'}
-            summary=${summary//$'\n'/'%0A'}
-            echo "::error::$summary"
-            exit "$status"
-          fi
+          ./gradlew --no-daemon :app:assembleDebug :app:testDebugUnitTest \
+            --tests 'com.example.security.AppPinStoreTest' \
+            --tests 'com.example.notifications.ReminderNotificationsTest' \
+            --tests 'com.example.ExampleRobolectricTest' 2>&1 | tee android-build.log
+
+  release-build:
+    name: Release build smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Create throwaway release key
+        run: |
+          keytool -genkeypair -keystore ci-release.jks -storepass cirelease -keypass cirelease \
+            -alias upload -dname 'CN=CI Release,O=Xasuus,C=SO' -keyalg RSA -keysize 2048 -validity 1000
+      - name: Assemble release variant
+        env:
+          KEYSTORE_PATH: ${{ github.workspace }}/ci-release.jks
+          STORE_PASSWORD: cirelease
+          KEY_PASSWORD: cirelease
+        run: |
+          ./gradlew --no-daemon --stacktrace :app:assembleRelease \
+            -PversionCode=1 -PversionName=0.0.0-ci
+          test -f app/build/outputs/apk/release/app-release.apk
+
   firestore-rules:
     runs-on: ubuntu-latest
     steps:

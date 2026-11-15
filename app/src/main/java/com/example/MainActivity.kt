@@ -69,6 +69,7 @@ class MainActivity : ComponentActivity() {
                     ) {
                         AppContent(
                             openCreateNote = intent.getBooleanExtra("create_note_from_widget", false),
+                            openNoteId = intent.getStringExtra("open_note_id"),
                             pinEnabled = pinEnabled,
                             onPinChange = { pin ->
                                 AppPinStore.setPin(this@MainActivity, pin)
@@ -90,6 +91,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun AppContent(
     openCreateNote: Boolean = false,
+    openNoteId: String? = null,
     pinEnabled: Boolean = false,
     onPinChange: (String?) -> Unit = {},
     onThemeChange: (Boolean) -> Unit = {}
@@ -147,6 +149,7 @@ fun AppContent(
                         MainScreen(
                             currentUserId = user.uid,
                             openCreateNote = openCreateNote,
+                            openNoteId = openNoteId,
                             pinEnabled = pinEnabled,
                             onPinChange = onPinChange,
                             onThemeChange = onThemeChange

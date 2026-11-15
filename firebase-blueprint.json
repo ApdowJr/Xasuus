@@ -37,6 +37,35 @@
           "type": "boolean",
           "description": "Whether note is archived"
         },
+        "isDeleted": {
+          "type": "boolean",
+          "description": "Whether note is in the trash"
+        },
+        "deletedAtMillis": {
+          "type": ["integer", "null"],
+          "description": "Milliseconds since epoch when the note was moved to the trash"
+        },
+        "reminderAtMillis": {
+          "type": ["integer", "null"],
+          "description": "Milliseconds since epoch for the local reminder, also synced for other devices"
+        },
+        "checklist": {
+          "type": "array",
+          "description": "Checklist items (max 100); each item has id, text (max 500) and isChecked",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "text": { "type": "string" },
+              "isChecked": { "type": "boolean" }
+            },
+            "required": ["id", "text", "isChecked"]
+          }
+        },
+        "attachments": {
+          "type": "array",
+          "description": "Download URLs for files under users/{userId}/notes/{noteId}/attachments (max 30, 20 MB each)"
+        },
         "color": {
           "type": "string",
           "description": "Color theme tag for note card"

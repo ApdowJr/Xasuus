@@ -125,7 +125,7 @@ class ReminderBroadcastReceiver : BroadcastReceiver() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         val notification = NotificationCompat.Builder(context, ReminderNotifications.CHANNEL_ID)
-            .setSmallIcon(R.mipmap.ic_launcher)
+            .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("Xasuus-ku-xasuusin")
             .setContentText(title)
             .setStyle(NotificationCompat.BigTextStyle().bigText("Waa waqtigii xasuustaada: $title"))

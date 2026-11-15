@@ -14,8 +14,18 @@ service cloud.firestore {
       return resource.data;
     }
 
-    function isValidId(id) {
-      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    function isValidChecklistItem(item) {
+      return item is map &&
+             item.keys().hasAll(['id', 'text', 'isChecked']) &&
+             item.id is string && item.id.size() <= 64 &&
+             item.text is string && item.text.size() <= 500 &&
+             item.isChecked is bool;
+    }
+
+    function isValidChecklist(checklist) {
+      return checklist is list &&
+             checklist.size() <= 100 &&
+             (checklist.size() == 0 || isValidChecklistItem(checklist[0]));
     }
 
     function isValidNote(data) {
@@ -33,7 +43,7 @@ service cloud.firestore {
              (!('isDeleted' in data) || data.isDeleted is bool) &&
              (!('deletedAtMillis' in data) || data.deletedAtMillis == null || data.deletedAtMillis is int) &&
              (!('reminderAtMillis' in data) || data.reminderAtMillis == null || data.reminderAtMillis is int) &&
-             (!('checklist' in data) || (data.checklist is list && data.checklist.size() <= 100)) &&
+             (!('checklist' in data) || isValidChecklist(data.checklist)) &&
              (!('attachments' in data) || (data.attachments is list && data.attachments.size() <= 30 && (data.attachments.size() == 0 || data.attachments[0] is string))) &&
              (!('color' in data) || (data.color is string && data.color.size() <= 32)) &&
              data.createdAt is timestamp &&

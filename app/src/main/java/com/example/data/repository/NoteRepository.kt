@@ -5,6 +5,7 @@ import com.example.R
 import com.example.data.model.Category
 import com.example.data.model.ChecklistEntry
 import com.example.data.model.Note
+import com.example.data.model.NoteLimits
 import com.example.data.util.OperationType
 import com.example.data.util.handleFirestoreError
 import com.google.firebase.Firebase
@@ -78,16 +79,18 @@ class NoteRepository(
         val docRef = db.collection("users").document(uid).collection("notes").document()
         val payload = mapOf(
             "userId" to uid,
-            "title" to title.trim(),
-            "content" to content.trim(),
-            "categoryId" to categoryId.ifBlank { "general" },
-            "tags" to tags.take(10),
-            "checklist" to checklist.map { mapOf("id" to it.id, "text" to it.text, "isChecked" to it.isChecked) },
+            "title" to title.trim().take(NoteLimits.TITLE),
+            "content" to content.trim().take(NoteLimits.CONTENT),
+            "categoryId" to categoryId.ifBlank { "general" }.take(NoteLimits.CATEGORY_ID),
+            "tags" to tags.take(NoteLimits.TAGS),
+            "checklist" to checklist.take(NoteLimits.CHECKLIST).map {
+                mapOf("id" to it.id.take(64), "text" to it.text.take(NoteLimits.CHECKLIST_TEXT), "isChecked" to it.isChecked)
+            },
             "attachments" to attachments,
             "isPinned" to isPinned,
             "isFavorite" to isFavorite,
             "isArchived" to isArchived,
-            "color" to color.ifBlank { "purple" },
+            "color" to color.ifBlank { "purple" }.take(32),
             "reminderAtMillis" to reminderAtMillis,
             "createdAt" to FieldValue.serverTimestamp(),
             "updatedAt" to FieldValue.serverTimestamp()
@@ -121,16 +124,18 @@ class NoteRepository(
         require(id.isNotBlank()) { "Note ID cannot be blank for update" }
         val docRef = db.collection("users").document(uid).collection("notes").document(id)
         val payload = mapOf(
-            "title" to title.trim(),
-            "content" to content.trim(),
-            "categoryId" to categoryId.ifBlank { "general" },
-            "tags" to tags.take(10),
-            "checklist" to checklist.map { mapOf("id" to it.id, "text" to it.text, "isChecked" to it.isChecked) },
+            "title" to title.trim().take(NoteLimits.TITLE),
+            "content" to content.trim().take(NoteLimits.CONTENT),
+            "categoryId" to categoryId.ifBlank { "general" }.take(NoteLimits.CATEGORY_ID),
+            "tags" to tags.take(NoteLimits.TAGS),
+            "checklist" to checklist.take(NoteLimits.CHECKLIST).map {
+                mapOf("id" to it.id.take(64), "text" to it.text.take(NoteLimits.CHECKLIST_TEXT), "isChecked" to it.isChecked)
+            },
             "attachments" to attachments,
             "isPinned" to isPinned,
             "isFavorite" to isFavorite,
             "isArchived" to isArchived,
-            "color" to color.ifBlank { "purple" },
+            "color" to color.ifBlank { "purple" }.take(32),
             "reminderAtMillis" to reminderAtMillis,
             "updatedAt" to FieldValue.serverTimestamp()
         )
@@ -274,9 +279,9 @@ class NoteRepository(
         val docRef = db.collection("users").document(uid).collection("categories").document()
         val payload = mapOf(
             "userId" to uid,
-            "name" to name.trim(),
-            "color" to color.ifBlank { "purple" },
-            "icon" to icon.ifBlank { "folder" },
+            "name" to name.trim().take(NoteLimits.CATEGORY_NAME),
+            "color" to color.ifBlank { "purple" }.take(32),
+            "icon" to icon.ifBlank { "folder" }.take(32),
             "createdAt" to FieldValue.serverTimestamp(),
             "updatedAt" to FieldValue.serverTimestamp()
         )

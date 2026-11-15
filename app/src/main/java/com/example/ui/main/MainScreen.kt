@@ -140,6 +140,7 @@ private data class PdfExportRequest(
 fun MainScreen(
     currentUserId: String,
     openCreateNote: Boolean = false,
+    openNoteId: String? = null,
     pinEnabled: Boolean = false,
     onPinChange: (String?) -> Unit = {},
     onThemeChange: (Boolean) -> Unit = {}
@@ -211,6 +212,17 @@ fun MainScreen(
         operationMessage?.let { msg ->
             snackbarHostState.showSnackbar(msg)
             viewModel.clearOperationMessage()
+        }
+    }
+
+    // A reminder notification carries the note id. Wait until the synced note list contains it,
+    // then open that note once; closing the editor must not reopen it on the next sync.
+    var pendingOpenNoteId by remember(openNoteId) { mutableStateOf(openNoteId) }
+    LaunchedEffect(pendingOpenNoteId, rawNotes) {
+        val requestedId = pendingOpenNoteId ?: return@LaunchedEffect
+        rawNotes.firstOrNull { it.id == requestedId }?.let { note ->
+            editingNote = note
+            pendingOpenNoteId = null
         }
     }
 

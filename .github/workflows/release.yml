@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   publish:
-    name: Build and publish signed APK
+    name: Build, test and publish signed APK
     runs-on: ubuntu-latest
     steps:
       - name: Check out source
@@ -28,8 +28,6 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '9.3.1'
 
       - name: Check release configuration
         env:
@@ -55,6 +53,20 @@ jobs:
         run: |
           set -euo pipefail
           printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/xasuus-release.jks"
+          chmod 600 "$RUNNER_TEMP/xasuus-release.jks"
+
+      - name: Create local debug key for unit tests
+        run: |
+          keytool -genkeypair -keystore debug.keystore -storepass android -keypass android \
+            -alias androiddebugkey -dname 'CN=Android Debug,O=Android,C=US' -keyalg RSA -validity 10000
+
+      - name: Run unit tests before publishing
+        run: |
+          ./gradlew --no-daemon --stacktrace \
+            :app:testDebugUnitTest \
+            --tests 'com.example.security.AppPinStoreTest' \
+            --tests 'com.example.notifications.ReminderNotificationsTest' \
+            --tests 'com.example.ExampleRobolectricTest'
 
       - name: Build signed release APK
         env:
@@ -66,12 +78,43 @@ jobs:
         run: |
           set -euo pipefail
           VERSION_NAME="${RELEASE_VERSION#v}"
-          gradle --no-daemon :app:assembleRelease \
+          ./gradlew --no-daemon --stacktrace :app:assembleRelease \
             -PversionName="$VERSION_NAME" \
             -PversionCode="$RELEASE_CODE"
+          test -f app/build/outputs/apk/release/app-release.apk
           cp app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/Xasuus.apk"
-          cd "$RUNNER_TEMP"
-          sha256sum Xasuus.apk > Xasuus.apk.sha256
+
+      - name: Verify APK signature and version
+        env:
+          RELEASE_VERSION: ${{ github.ref_name }}
+          RELEASE_CODE: ${{ github.run_number }}
+        run: |
+          set -euo pipefail
+          BUILD_TOOLS="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)"
+          APKSIGNER="$BUILD_TOOLS/apksigner"
+          AAPT2="$BUILD_TOOLS/aapt2"
+          "$APKSIGNER" verify --verbose --print-certs "$RUNNER_TEMP/Xasuus.apk" | tee "$RUNNER_TEMP/certificates.txt"
+          if grep -qi 'CN=Android Debug' "$RUNNER_TEMP/certificates.txt"; then
+            echo "Release APK was signed with the debug key. Check the signing secrets." >&2
+            exit 1
+          fi
+          "$AAPT2" dump badging "$RUNNER_TEMP/Xasuus.apk" | grep -E "^(package|sdkVersion|targetSdkVersion):"
+          if ! "$AAPT2" dump badging "$RUNNER_TEMP/Xasuus.apk" | grep -q "versionName='${RELEASE_VERSION#v}'"; then
+            echo "APK versionName does not match tag ${RELEASE_VERSION}" >&2
+            exit 1
+          fi
+          echo "Add the SHA-1/SHA-256 above to the Firebase Android app so Google Sign-In works in this release." | tee -a "$GITHUB_STEP_SUMMARY"
+          ( cd "$RUNNER_TEMP" && sha256sum Xasuus.apk > Xasuus.apk.sha256 )
+
+      - name: Upload build reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-logs
+          path: |
+            app/build/reports/**
+            app/build/outputs/logs/**
+          if-no-files-found: ignore
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2

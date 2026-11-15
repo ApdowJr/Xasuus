@@ -96,6 +96,7 @@ import androidx.compose.ui.unit.sp
 import com.example.data.model.Category
 import com.example.data.model.ChecklistEntry
 import com.example.data.model.Note
+import com.example.data.model.NoteLimits
 import com.example.ui.components.ActionButton
 import com.example.ui.components.Eyebrow
 import com.example.ui.components.Hairline
@@ -402,7 +403,7 @@ fun NoteEditorScreen(
 
                 BasicTextField(
                     value = title,
-                    onValueChange = { title = it.replace("\n", "") },
+                    onValueChange = { title = it.replace("\n", "").take(NoteLimits.TITLE) },
                     textStyle = MaterialTheme.typography.headlineLarge.copy(
                         fontSize = 28.sp,
                         lineHeight = 35.sp,
@@ -454,7 +455,7 @@ fun NoteEditorScreen(
 
                 BasicTextField(
                     value = content,
-                    onValueChange = { content = it },
+                    onValueChange = { content = it.take(NoteLimits.CONTENT) },
                     textStyle = MaterialTheme.typography.bodyLarge.copy(
                         fontSize = 15.5.sp,
                         lineHeight = 26.sp,
@@ -516,7 +517,7 @@ fun NoteEditorScreen(
                                 )
                                 BasicTextField(
                                     value = item.text,
-                                    onValueChange = { text -> checklist[index] = item.copy(text = text) },
+                                    onValueChange = { text -> checklist[index] = item.copy(text = text.take(NoteLimits.CHECKLIST_TEXT)) },
                                     textStyle = MaterialTheme.typography.bodyMedium.copy(
                                         color = if (item.isChecked) colors.inkFaint else colors.ink
                                     ),

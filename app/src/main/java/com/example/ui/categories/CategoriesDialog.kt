@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.data.model.Category
+import com.example.data.model.NoteLimits
 import com.example.ui.components.ActionButton
 import com.example.ui.components.Eyebrow
 import com.example.ui.components.Pill
@@ -167,7 +168,7 @@ fun CategoriesDialog(
                             }
                             BasicTextField(
                                 value = newCategoryName,
-                                onValueChange = { newCategoryName = it },
+                                onValueChange = { newCategoryName = it.take(NoteLimits.CATEGORY_NAME) },
                                 singleLine = true,
                                 textStyle = MaterialTheme.typography.bodyMedium.copy(color = colors.ink),
                                 cursorBrush = SolidColor(tone.accent),
