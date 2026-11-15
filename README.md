@@ -26,28 +26,26 @@ Use a new, increasing version each time (`v1.0.1`, `v1.1.0`, `v2.0.0`, …). The
 
 ### One-time GitHub Actions configuration
 
-Before the first tag, add these repository **Actions secrets** under **Settings → Secrets and variables → Actions**:
+A persistent release key already exists and is registered in Firebase (see the checklist below), so the only remaining step is to upload it to GitHub. Add these repository **Actions secrets** under **Settings → Secrets and variables → Actions**:
 
-- `ANDROID_KEYSTORE_BASE64` — base64 encoding of the persistent release keystore.
+- `ANDROID_KEYSTORE_BASE64` — base64 encoding of `xasuus-release.jks` (alias `upload`).
 - `ANDROID_STORE_PASSWORD` — that keystore's password.
-- `ANDROID_KEY_PASSWORD` — password for the `upload` key.
-The Firebase Android configuration is included at `app/google-services.json`; it is client configuration, not a service-account credential. Protect your Firebase data with the deployed Firestore and Storage rules and Firebase Console restrictions. Never commit a service-account key.
+- `ANDROID_KEY_PASSWORD` — password for the `upload` key (the same value as the store password).
 
-Create the release key once and keep its keystore and passwords backed up securely. Do not commit the keystore or passwords. The app Gradle configuration uses the alias `upload`:
+Generate the base64 value without line breaks:
 
 ```bash
-keytool -genkeypair -v \
-  -keystore xasuus-release.jks \
-  -alias upload \
-  -keyalg RSA -keysize 2048 -validity 10000
-
 # Linux:
 base64 -w 0 xasuus-release.jks
 # macOS:
 base64 < xasuus-release.jks | tr -d '\n'
 ```
 
-If the signing key is lost or replaced, Android will reject in-place updates signed by the new key. The checked-in `.firebaserc` selects the project configured in `app/google-services.json`. In Firebase Console, enable Email/Password sign-in, create/verify the configured Firestore database and Storage bucket, then deploy the repository's security rules with Firebase CLI:
+The Firebase Android configuration is included at `app/google-services.json`; it is client configuration, not a service-account credential. Protect your Firebase data with the deployed Firestore and Storage rules and Firebase Console restrictions. Never commit a service-account key.
+
+If the keystore ever has to be recreated, keep the new keystore and passwords backed up securely and never commit them. The app Gradle configuration uses the alias `upload`, and the fingerprints registered in Firebase must be replaced together with the key. Changing the signing key rejects in-place updates from the old key, so users would have to uninstall first.
+
+The checked-in `.firebaserc` selects the project configured in `app/google-services.json`. In Firebase Console, enable Email/Password sign-in, create/verify the configured Firestore database and Storage bucket, then deploy the repository's security rules with Firebase CLI:
 
 ```bash
 firebase deploy --only firestore:rules,storage
@@ -85,7 +83,7 @@ The checked-in configuration targets project `gen-lang-client-0072788294` with A
    firebase deploy --only firestore:rules
    ```
 
-2. **Authentication.** In Firebase Console, enable Email/Password and Google providers. Google Sign-In additionally needs the signing certificate registered (step 5).
+2. **Authentication.** Email/Password and Google sign-in are both enabled in Firebase Authentication (`defaultSupportedIdpConfigs/google.com` has `enabled: true`), so no console change is needed. Google Sign-In additionally needs the signing certificate registered (step 5).
 
 3. **Storage.** Cloud Storage is **not initialized** in this project and the project has **no billing account**. Cloud Storage for Firebase now requires the Blaze (pay-as-you-go) plan even within its free usage tier, so bucket creation is rejected with "The billing account for the owning project is disabled in state absent". Until billing is enabled and **Build → Storage → Get Started** is completed in the Firebase Console, attachment uploads fail and the rest of the app keeps working. After the bucket exists, deploy the rules:
 
@@ -95,7 +93,11 @@ The checked-in configuration targets project `gen-lang-client-0072788294` with A
 
 4. **App Check.** The app does not initialize App Check, so do not turn on enforcement for Firestore or Storage; the release APK would be blocked. Add a Play Integrity provider before enforcing.
 
-5. **Release signing certificate.** `app/google-services.json` only contains the AI Studio debug SHA-1 (`417c25b6…`). The release workflow prints the release keystore's SHA-1/SHA-256 (`apksigner verify --print-certs`) and fails if the APK is debug-signed. Add those fingerprints under **Project settings → Your apps → com.aistudio.mynotes.xasuus → Add fingerprint** and regenerate `google-services.json` if needed. Without this, Google Sign-In fails in the release APK with `DEVELOPER_ERROR` code 10, while email/password sign-in keeps working.
+5. **Release signing certificate.** The persistent release key (`xasuus-release.jks`, alias `upload`, RSA 4096) is registered in Firebase under **Project settings → Your apps → com.aistudio.mynotes.xasuus → Additional fingerprints**:
+   - SHA-1 `B0:B5:EE:B0:2A:59:F1:A8:7B:2E:1D:49:54:91:8F:09:46:D9:B7:FC`
+   - SHA-256 `BC:3F:D9:7A:35:77:E9:A0:D0:75:F9:A6:8C:AC:F0:54:5F:A7:98:E9:44:4C:53:DC:65:A3:CE:9E:0F:42:C6:4F`
+
+   The debug SHA-1 (`417c25b6…`) is also still registered for local development. The release workflow prints the keystore's SHA-1/SHA-256 (`apksigner verify --print-certs`) and fails if the APK is debug-signed. Without a matching fingerprint, Google Sign-In fails in the release APK with `DEVELOPER_ERROR` code 10, while email/password sign-in keeps working. `app/google-services.json` lists no certificate hashes (`certificate_hash` is empty), so it does not need regenerating after adding a fingerprint; the SDK checks the installed APK at runtime.
 
 6. **Test with two accounts.** Verify sign-up, sign-in, sync, attachments, trash/restore, reminders, and user isolation. Use emulators/demo data, never production notes.
 
